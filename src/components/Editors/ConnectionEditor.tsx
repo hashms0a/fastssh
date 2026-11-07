@@ -55,6 +55,8 @@ export function ConnectionEditor({ seed, mode }: { seed: Host; mode: EditorMode 
     setSaving(true);
     const ok = await saveHosts(upsertHost(hosts, next));
     setSaving(false);
+    // The landing card follows what you just saved.
+    if (ok) selectHost(next.id);
     if (ok) pushToast(strings.savedConnection(next.name));
     closeEditor();
   };

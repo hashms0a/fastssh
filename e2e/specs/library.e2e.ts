@@ -285,7 +285,7 @@ describe("connection + account editors (Stage 3)", () => {
     // A new tunnel becomes an editable row, and its type feeds the preview.
     await type("field-port", "22");
     await tap({ id: "tunnel-add" }, { id: "tunnel-row-0" });
-    await (await byTestId("tunnel-type-0")).selectByVisibleText(browser, "-R remote");
+    await selectInPage("tunnel-type-0", "remote");
     await tapButton("editor-save");
     expect(await (await byTestId("landing-name")).getText()).toBe("web-1");
     await shot("stage_03", "editor-tunnel-invalid.png");

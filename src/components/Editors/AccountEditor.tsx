@@ -18,6 +18,7 @@ export function AccountEditor({ seed, mode }: { seed: Account; mode: EditorMode 
   const hosts = useAppStore((s) => s.hosts);
   const accounts = useAppStore((s) => s.accounts);
   const saveAccounts = useAppStore((s) => s.saveAccounts);
+  const selectAccount = useAppStore((s) => s.selectAccount);
   const saveHosts = useAppStore((s) => s.saveHosts);
   const closeEditor = useAppStore((s) => s.closeEditor);
   const pushToast = useAppStore((s) => s.pushToast);
@@ -44,6 +45,8 @@ export function AccountEditor({ seed, mode }: { seed: Account; mode: EditorMode 
     const res = upsertAccount(hosts, accounts, next, seed.name);
     const ok = await Promise.all([saveAccounts(res.accounts), saveHosts(res.hosts)]);
     setSaving(false);
+    // The landing card follows what you just saved.
+    if (ok.every(Boolean)) selectAccount(next.id);
     if (ok.every(Boolean)) pushToast(strings.savedAccount(next.name));
     closeEditor();
   };

@@ -1,18 +1,14 @@
-import { byTestId } from "../helpers";
+import { byTestId, shot } from "../helpers";
 
 describe("probe", () => {
-  it("tunnel row keys", async () => {
+  it("save closes the editor", async () => {
     await (await byTestId("new-connection")).click();
-    await (await byTestId("tunnel-add")).click();
-    await browser.pause(600);
-    const sel = '[data-testid="tunnel-dest-host-0"]';
-    const el = await $(sel);
-    await el.click();
-    await browser.keys(["Control", "a"]);
-    await browser.keys(["Delete"]);
-    for (const ch of "127.0.0.1 8080") await browser.keys([ch]);
-    await browser.pause(400);
-    console.log("P1 value", await (await $(sel)).getProperty("value"));
-    console.log("P1 row", (await (await byTestId("tunnel-row-0")).getHTML()).slice(0, 700));
+    await (await byTestId("connection-editor")).waitForExist();
+    await (await byTestId("field-name")).setValue(`probe-${Date.now()}`);
+    await (await byTestId("field-host")).setValue("10.0.0.9");
+    await (await byTestId("editor-save")).click();
+    await browser.pause(2500);
+    await shot("stage_03", "probe-after-save.png");
+    expect(await (await byTestId("landing-name")).getText()).toContain("probe-");
   });
 });
