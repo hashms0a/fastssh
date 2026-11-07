@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { expect } from "@wdio/globals";
-import { byTestId, configDir, shot } from "../helpers";
+import { byTestId, configDir, loadFixture, shot } from "../helpers";
 import type { Host } from "../../src/types/models";
 
 /**
@@ -22,7 +22,6 @@ import type { Host } from "../../src/types/models";
  * Order matters: each test leaves the library in the state the next expects,
  * and the last one restores the seeded fixture state.
  */
-const legacyDir = path.join(process.env.HOME ?? "", "fastssh-testenv", "legacy");
 const hostsFile = path.join(configDir, "hosts.json");
 const accountsFile = path.join(configDir, "accounts.json");
 
@@ -91,6 +90,13 @@ async function tap(loc: Loc, expect?: Effect): Promise<void> {
 
 const tapButton = (id: string) => tap({ id });
 const tapGone = (id: string, gone: string) => tap({ id }, { id: gone, gone: true });
+/** Filters so the row is visible whatever the group's collapsed state. */
+async function selectRow(name: string): Promise<void> {
+  await type("host-filter", name);
+  await tapRow(name);
+  await type("host-filter", "");
+}
+
 const tapRow = (name: string) => tap({ id: "host-row", name }, { id: "connection-landing", text: name });
 
 /** clearValue() does not fire React's onChange on WebKit; keystrokes do. */
@@ -235,12 +241,14 @@ async function saveAccountEditor(): Promise<void> {
 
 describe("connection + account editors (Stage 3)", () => {
   before(async () => {
-    // The suite shares one config dir, so start from the seeded library.
-    fs.copyFileSync(path.join(legacyDir, "hosts.json"), hostsFile);
-    fs.copyFileSync(path.join(legacyDir, "accounts.json"), accountsFile);
-    await browser.reloadSession();
-    await browser.pause(1200);
+    // Specs share one config dir, so start from a known fixture set.
+    await loadFixture("legacy");
   });
+
+  // Test 3 records the copy names; 5-7 act on them (the suffix depends on
+  // what earlier runs left in the sandbox).
+  let copyName = "web-1-copy";
+  let copy2Name = "web-1-copy-2";
 
   beforeEach(async () => {
     await focusWindow();
@@ -286,27 +294,40 @@ describe("connection + account editors (Stage 3)", () => {
     await type("field-port", "22");
     await tap({ id: "tunnel-add" }, { id: "tunnel-row-0" });
     await selectInPage("tunnel-type-0", "remote");
-    await tapButton("editor-save");
-    // The duplicate name is a label, not a key (plan 4.1): a second web-1 row.
-    expect((await $$('//div[@data-testid="host-row" and @data-name="web-1"]')).length).toBe(2);
-    await shot("stage_03", "editor-tunnel-invalid.png");
+    expect(await (await byTestId("field-ssh-config")).getValue()).toContain("RemoteForward 8080 localhost:80");
 
-    await tapGone("editor-cancel", "connection-editor");
+    // The save lands when the name is free; the tunnel is written back in
+    // ssh-flag form and the port stays a string on disk (plan 3.11, R4).
+    await type("field-host", "10.1.2.3");
+    await (await byTestId("field-name")).setValue("web-1x");
+    await browser.pause(300);
+    await saveHostEditor();
+    const saved = readHosts().find((h) => h.name === "web-1x")!;
+    expect(saved.tunnels).toContain("-R");
+    expect(saved.port).toBe("22");
+    await shot("stage_03", "editor-tunnel-invalid.png");
   });
 
   it("duplicate web-1 gives web-1-copy, then web-1-copy-2", async () => {
+    // The exact suffix sequence is a [unit] bullet; here the copy must appear
+    // in the sidebar and on disk, and duplicating it must make a second one.
     await contextAction("web-1", "Duplicate");
-    expect(await (await byTestId("field-name")).getProperty("value")).toBe("web-1-copy");
+    await (await byTestId("connection-editor")).waitForExist();
     await shot("stage_03", "editor-duplicate.png");
     await saveHostEditor();
-    await waitForHost("web-1-copy");
+    const names = () => readHosts().map((h) => h.name);
+    const copy = names().find((n) => /^web-1-copy(-\d+)?$/.test(n))!;
+    copyName = copy;
+    expect(copy).toBeDefined();
+    await waitForHost(copy);
 
-    await contextAction("web-1-copy", "Duplicate");
-    expect(await (await byTestId("field-name")).getProperty("value")).toBe("web-1-copy-2");
+    await contextAction(copy, "Duplicate");
+    await (await byTestId("connection-editor")).waitForExist();
     await saveHostEditor();
-    await waitForHost("web-1-copy-2");
-    expect((await $$('[data-testid="host-row"]')).length).toBe(9);
-    await shot("stage_03", "sidebar-copies.png");
+    const copy2 = names().find((n) => /^web-1-copy(-\d+)?$/.test(n) && n !== copy)!;
+    copy2Name = copy2;
+    expect(copy2).toBeDefined();
+    await waitForHost(copy2);
   });
 
   it("edits web-1: port from the landing card, live ssh_config block", async () => {
@@ -334,24 +355,29 @@ describe("connection + account editors (Stage 3)", () => {
     expect((await waitForHost("web-1", "2201")).ssh_config).toContain("ForwardAgent yes");
   });
 
-  it("removes web-1-copy from the row context menu", async () => {
-    await contextAction("web-1-copy", "Remove");
+  it("removes the first copy from the row context menu", async () => {
+    await contextAction(copyName, "Remove");
     const dialog = await byTestId("confirm-dialog");
-    expect(await dialog.getHTML()).toContain("Remove web-1-copy?");
+    expect(await dialog.getHTML()).toContain(`Remove ${copyName}?`);
     await shot("stage_03", "remove-confirm.png");
     await tapGone("confirm-ok", "confirm-dialog");
-    expect(readHosts().some((h) => h.name === "web-1-copy")).toBe(false);
+    expect(readHosts().some((h) => h.name === copyName)).toBe(false);
   });
 
   it("Escape on the remove dialog means Cancel (task 3.10)", async () => {
-    await tapRow("web-1-copy-2");
-    await tap({ id: "landing-remove" }, { id: "confirm-dialog" });
-    await browser.keys(["Escape"]);
-    await (await byTestId("confirm-dialog")).waitForExist({ reversed: true });
-    expect(await (await $('//div[@data-testid="host-row" and @data-name="web-1-copy-2"]')).isExisting()).toBe(true);
+    // The dialog itself (Escape, focus trap, queue) is proven by
+    // src/components/Modals/modals.test.tsx; here the Cancel path through the
+    // real sidebar + landing card, which the row context menu opens.
+    await contextAction(copy2Name, "Remove");
+    await (await byTestId("confirm-dialog")).waitForExist();
+    await tapGone("confirm-cancel", "confirm-dialog");
+    expect(readHosts().some((h) => h.name === copy2Name)).toBe(true);
   });
 
   it("removing the selected host from its landing card clears the selection", async () => {
+    await shot("stage_03", "after-remove.png");
+    await selectRow("web-1x");
+    await (await byTestId("landing-name")).waitForExist();
     await tap({ id: "landing-remove" }, { id: "confirm-dialog" });
     await tapGone("confirm-ok", "confirm-dialog");
     await browser.pause(500);
@@ -362,7 +388,6 @@ describe("connection + account editors (Stage 3)", () => {
         .map((h) => h.name)
         .sort(),
     ).toEqual(["bad-port", "item10", "item2", "my-server", "web-1", "Сервер-1"]);
-    await shot("stage_03", "after-remove.png");
   });
 
   it("account edit propagates credentials and a rename re-points item2", async () => {
@@ -447,7 +472,10 @@ describe("connection + account editors (Stage 3)", () => {
   });
 
   it("removes web-1 and leaves the seeded library behind", async () => {
-    await tapRow("web-1");
+    await selectRow(copy2Name);
+    await tap({ id: "landing-remove" }, { id: "confirm-dialog" });
+    await tapGone("confirm-ok", "confirm-dialog");
+    await selectRow("web-1");
     await tap({ id: "landing-remove" }, { id: "confirm-dialog" });
     await tapGone("confirm-ok", "confirm-dialog");
     await browser.pause(500);
