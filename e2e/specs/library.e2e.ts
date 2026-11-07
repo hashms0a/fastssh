@@ -90,10 +90,18 @@ async function tap(loc: Loc, expect?: Effect): Promise<void> {
 
 const tapButton = (id: string) => tap({ id });
 const tapGone = (id: string, gone: string) => tap({ id }, { id: gone, gone: true });
-/** Filters so the row is visible whatever the group's collapsed state. */
+/**
+ * Filters so the row is visible whatever the group's collapsed state, then
+ * taps until the landing card follows (the first W3C click after a filter
+ * change is sometimes dropped).
+ */
 async function selectRow(name: string): Promise<void> {
   await type("host-filter", name);
-  await tapRow(name);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await tapRow(name);
+    if ((await (await byTestId("landing-name")).getText().catch(() => "")) === name) break;
+    await browser.pause(300);
+  }
   await type("host-filter", "");
 }
 

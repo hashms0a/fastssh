@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { expect } from "@wdio/globals";
-import { byTestId, configDir, shot } from "../helpers";
+import { byTestId, configDir, loadFixture, shot } from "../helpers";
 import { tmpDir } from "../paths";
 
 /**
@@ -75,8 +75,12 @@ async function dragSplitterTo(x: number): Promise<void> {
 }
 
 describe("app shell (Stage 2)", () => {
+  before(async () => {
+    // Specs never depend on each other: start from the legacy fixture set.
+    await loadFixture("legacy");
+  });
+
   it("shows Local first, groups in natural order, item2 before item10", async () => {
-    await browser.pause(1200);
     await shot("stage_02", "sidebar-dark.png");
     expect(await groupNames()).toEqual(["Local", "Broken", "Lab", "Unreachable"]);
     expect(await rowNames()).toEqual(["Localhost", "bad-port", "item2", "item10", "my-server", "Сервер-1"]);

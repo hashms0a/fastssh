@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Host } from "../../types/models";
 import { LOCALHOST_ID } from "../../types/models";
 import { strings } from "../../lib/strings";
+import { resolveCredentials } from "../../lib/hostUtils";
 import { duplicateHostAction, editHost, removeHost } from "../../lib/editorActions";
 import { useAppStore } from "../../store/useAppStore";
 import { ContextMenu } from "../ContextMenu";
@@ -21,6 +22,7 @@ interface Props {
  */
 export function HostRow({ host, selected, onConnect }: Props) {
   const selectHost = useAppStore((s) => s.selectHost);
+  const accounts = useAppStore((s) => s.accounts);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const isLocal = host.id === LOCALHOST_ID;
 
@@ -53,7 +55,7 @@ export function HostRow({ host, selected, onConnect }: Props) {
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium">{host.name}</span>
         <span className={`block truncate text-xs ${selected ? "text-white/80" : "text-[var(--muted)]"}`}>
-          {strings.hostSubtitle(host)}
+          {strings.hostSubtitle({ ...host, username: resolveCredentials(host, accounts).username })}
         </span>
       </span>
       {/* Slots wired in Stages 4/6 (R13): tab-count badge + unread dot. */}

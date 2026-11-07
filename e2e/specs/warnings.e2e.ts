@@ -41,8 +41,11 @@ describe("corrupt data files (Stage 1)", () => {
     await shot("stage_01", "warnings-banner.png");
     // Two warning toasts per file (parse error + rename note); dismissing
     // the warnings group clears all of them.
-    const dismissals = await $$('[data-testid="warnings-dismiss"]');
-    await dismissals[0]!.click();
+    // The W3C pointer in WebKitGTK reports this banner button as
+    // non-interactable, so the click goes in-page.
+    await browser.execute(() => {
+      (document.querySelector('[data-testid="warnings-dismiss"]') as HTMLElement).click();
+    });
     await expect(banner).not.toBeExisting();
 
     // Exact restart proof (acceptance "size is the same, within 2 px"):
@@ -64,6 +67,9 @@ describe("corrupt data files (Stage 1)", () => {
     // Snapshot the on-disk state for the NEXT e2e run (this is the suite's
     // last spec; states' SIGKILL ran before this reload).
     fs.mkdirSync(tmpDir, { recursive: true });
-    fs.copyFileSync(path.join(configDir, "settings.json"), prevFile);
+    // The sandbox starts without settings.json; the app writes it on the first
+    // change, so a snapshot is optional.
+    const settings = path.join(configDir, "settings.json");
+    if (fs.existsSync(settings)) fs.copyFileSync(settings, prevFile);
   });
 });
