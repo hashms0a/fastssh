@@ -3,8 +3,10 @@ pub mod env_sanitize;
 pub mod error;
 pub mod models;
 pub mod paths;
+pub mod pty_manager;
 pub mod settings;
 pub mod storage;
+pub mod utf8_chunker;
 
 use std::sync::Mutex;
 use tauri::Manager;
@@ -30,6 +32,7 @@ pub fn run() {
             settings: Mutex::new(initial.clone()),
             passphrase: Mutex::new(None),
         })
+        .manage(pty_manager::PtyManager::default())
         .setup(move |app| {
             log::info!(
                 "config_dir={:?} ssh_dir={:?} legacy_dir={:?}",
@@ -63,7 +66,18 @@ pub fn run() {
             commands::library::save_accounts,
             commands::library::save_bookmarks,
             commands::library::save_settings,
+            commands::session::spawn_session,
+            commands::session::write_pty,
+            commands::session::resize_pty,
+            commands::session::kill_session,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while building FastSSH");
+        .build(tauri::generate_context!())
+        .expect("error while building FastSSH")
+        .run(|app_handle, event| {
+            // R20/plan Stage 4: every PTY child dies with the app, so no
+            // ssh or shell process is orphaned after a quit.
+            if let tauri::RunEvent::Exit = event {
+                app_handle.state::<pty_manager::PtyManager>().kill_all();
+            }
+        });
 }

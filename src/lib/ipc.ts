@@ -48,4 +48,11 @@ export const ipc = {
   saveAccounts: (accounts: Account[]) => invoke<void>("save_accounts", { accounts }),
   saveBookmarks: (bookmarks: Bookmark[]) => invoke<void>("save_bookmarks", { bookmarks }),
   saveSettings: (settings: AppSettings) => invoke<void>("save_settings", { settings }),
+
+  // Sessions (Stage 4). Rust accepts only host.local === true for now.
+  spawnSession: (sessionId: string, host: Host, syncSshConfig: boolean, cols: number, rows: number) =>
+    invoke<void>("spawn_session", { sessionId, host, syncSshConfig, cols, rows }),
+  writePty: (sessionId: string, data: string) => invoke<void>("write_pty", { sessionId, data }),
+  resizePty: (sessionId: string, cols: number, rows: number) => invoke<void>("resize_pty", { sessionId, cols, rows }),
+  killSession: (sessionId: string) => invoke<void>("kill_session", { sessionId }),
 };

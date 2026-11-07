@@ -4,11 +4,12 @@ import { strings } from "./lib/strings";
 import { logError } from "./lib/log";
 import { useWindowState } from "./hooks/useWindowState";
 import { useCloseHandler } from "./hooks/useCloseHandler";
+import { useShortcuts } from "./hooks/useShortcuts";
 import { useAppStore } from "./store/useAppStore";
 import { HeaderBar } from "./components/HeaderBar";
 import { SourceListView } from "./components/Sidebar/SourceListView";
 import { Splitter } from "./components/Splitter";
-import { WorkspaceEmptyState } from "./components/Workspace/WorkspaceEmptyState";
+import { Workspace } from "./components/Workspace/Workspace";
 import { EditorOverlay } from "./components/Editors/EditorOverlay";
 import { ModalHost } from "./components/Modals/ModalHost";
 import { Toasts } from "./components/Toasts";
@@ -18,6 +19,7 @@ export default function App() {
   const panelSize = useAppStore((s) => s.settings.panelSize);
   useWindowState();
   useCloseHandler();
+  useShortcuts();
 
   useEffect(() => {
     ipc
@@ -39,9 +41,7 @@ export default function App() {
         </aside>
         <Splitter />
         <main className="relative flex min-w-0 flex-1 flex-col">
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-            <WorkspaceEmptyState />
-          </div>
+          <Workspace />
           {/* Editors float over the workspace; notebooks stay mounted. */}
           <EditorOverlay />
           <p

@@ -7,6 +7,8 @@ import type { Account, Host } from "../types/models";
 import { duplicateAccount, duplicateHost, hostsUsingAccount, newAccount, newHost } from "./hostUtils";
 import { removeAccount, removeById, upsertHost } from "./libraryActions";
 import { strings } from "./strings";
+import { tabCountOf } from "../store/slices/tabsSlice";
+import { closeHostTabs } from "../terminal/sessionController";
 import { useAppStore } from "../store/useAppStore";
 
 const store = () => useAppStore.getState();
@@ -25,14 +27,15 @@ export function duplicateHostAction(host: Host): void {
   store().openEditor({ kind: "host", mode: "add", seed: duplicateHost(host, hosts) });
 }
 
-/** Task 3.8: confirm, then remove; "N open tabs" appears from Stage 4 on. */
+/** Task 3.8: confirm, then remove. Open tabs are closed first (Stage 4). */
 export async function removeHost(host: Host): Promise<void> {
   const s = store();
-  const withTabs = await s.confirm({
-    title: strings.remove,
-    message: strings.removeConnectionConfirm(host.name),
-  });
+  const openTabs = tabCountOf(s, host.id);
+  const message =
+    openTabs > 0 ? strings.removeConnectionWithTabs(host.name, openTabs) : strings.removeConnectionConfirm(host.name);
+  const withTabs = await s.confirm({ title: strings.remove, message });
   if (!withTabs) return;
+  closeHostTabs(host.id);
   const ok = await s.saveHosts(removeById(s.hosts, host.id));
   if (s.selectedHostId === host.id) s.selectHost(null);
   if (ok) s.pushToast(strings.removedConnection(host.name));

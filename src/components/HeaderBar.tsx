@@ -4,8 +4,8 @@ import { strings } from "../lib/strings";
 import { ipc } from "../lib/ipc";
 import { logError } from "../lib/log";
 import { addHost } from "../lib/editorActions";
+import { openLocalShell } from "../terminal/sessionController";
 import { useAppStore } from "../store/useAppStore";
-import { LOCALHOST_ID } from "../types/models";
 import { ContextMenu } from "./ContextMenu";
 
 /**
@@ -16,8 +16,6 @@ import { ContextMenu } from "./ContextMenu";
 export function HeaderBar() {
   const filter = useAppStore((s) => s.filter);
   const setFilter = useAppStore((s) => s.setFilter);
-  const selectHost = useAppStore((s) => s.selectHost);
-  const setSidebarMode = useAppStore((s) => s.setSidebarMode);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
   return (
@@ -43,10 +41,7 @@ export function HeaderBar() {
         data-testid="local-shell"
         title={strings.localShell}
         className="flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1.5 text-sm hover:bg-[var(--accent)] hover:text-white"
-        onClick={() => {
-          setSidebarMode("hosts");
-          selectHost(LOCALHOST_ID);
-        }}
+        onClick={() => openLocalShell()}
       >
         <TerminalSquare size={15} aria-hidden />
         {strings.localShell}

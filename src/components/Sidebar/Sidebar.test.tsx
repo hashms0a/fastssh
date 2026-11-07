@@ -3,6 +3,7 @@ import { fireEvent, render, screen, act } from "@testing-library/react";
 import { SourceListView } from "./SourceListView";
 import { useAppStore } from "../../store/useAppStore";
 import { DEFAULT_SETTINGS, LOCALHOST_HOST, type Host } from "../../types/models";
+import { tabIdsOf } from "../../store/slices/tabsSlice";
 import { installIpcMock, emptyReport, callsTo, type MockBackend } from "../../test/ipcMock";
 
 function host(name: string, group: string, extra: Partial<Host> = {}): Host {
@@ -13,6 +14,8 @@ let backend: MockBackend;
 
 beforeEach(() => {
   backend = installIpcMock();
+  // Tabs are per-run state; hydrate does not touch them.
+  useAppStore.setState({ tabs: {}, tabOrder: {}, activeTabByHost: {} });
   useAppStore.getState().hydrate(
     emptyReport({
       hosts: [
@@ -76,11 +79,55 @@ describe("SourceListView (Stage 2)", () => {
     vi.useRealTimers();
   });
 
-  it("a double-click on a row calls the connect handler (toast stub)", () => {
+  it("a double-click on a row opens a tab and spawns the local shell", async () => {
     render(<SourceListView />);
-    useAppStore.setState({ toasts: [] });
     fireEvent.doubleClick(screen.getAllByTestId("host-row")[0]!); // Localhost row
-    expect(useAppStore.getState().toasts).toHaveLength(1);
+    await vi.waitFor(() => expect(callsTo(backend, "spawn_session")).toHaveLength(1));
+    const ids = tabIdsOf(useAppStore.getState(), LOCALHOST_HOST.id);
+    expect(ids).toHaveLength(1);
+    const args = callsTo(backend, "spawn_session")[0]!.args;
+    expect((args.host as Host).local).toBe(true);
+    expect(args.sessionId).toBe(useAppStore.getState().tabs[ids[0]!]?.sessionId);
+  });
+
+  it("shows the open-tab count and the unread dot on a row (task 4.13, R13)", () => {
+    render(<SourceListView />);
+    act(() =>
+      useAppStore.getState().addTab({
+        id: "t1",
+        hostId: "item10",
+        sessionId: "s1",
+        title: "item10",
+        unread: false,
+        loggedIn: false,
+        exited: false,
+        exitCode: null,
+      }),
+    );
+    act(() =>
+      useAppStore.getState().addTab({
+        id: "t2",
+        hostId: "item10",
+        sessionId: "s2",
+        title: "item10 (2)",
+        unread: true,
+        loggedIn: false,
+        exited: false,
+        exitCode: null,
+      }),
+    );
+    const row = [...document.querySelectorAll<HTMLElement>('[data-testid="host-row"]')].find(
+      (el) => el.getAttribute("data-name") === "item10",
+    )!;
+    const badge = row.querySelector('[data-testid="host-row-badge"]')!;
+    expect(badge.textContent).toBe("2");
+    expect(badge.className).not.toContain("hidden");
+    expect(row.querySelector('[data-testid="host-row-unread"]')!.className).not.toContain("hidden");
+    // A host without tabs keeps both slots hidden.
+    const local = [...document.querySelectorAll<HTMLElement>('[data-testid="host-row"]')].find(
+      (el) => el.getAttribute("data-name") === "Localhost",
+    )!;
+    expect(local.querySelector('[data-testid="host-row-badge"]')!.className).toContain("hidden");
   });
 
   it("shows accounts sorted on the Accounts side", () => {

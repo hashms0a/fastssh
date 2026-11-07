@@ -31,6 +31,8 @@ export const strings = {
   noAccounts: "No shared accounts",
   newAccount: "New Account",
   connect: "Connect",
+  newTab: "New tab",
+  closeTab: "Close tab",
   edit: "Edit",
   duplicate: "Duplicate",
   remove: "Remove",
@@ -72,6 +74,8 @@ export const strings = {
   removedConnection: (name: string) => `Removed ${name}`,
   removedAccount: (name: string) => `Removed ${name}`,
   removeConnectionConfirm: (name: string) => `Remove ${name}?`,
+  removeConnectionWithTabs: (name: string, tabs: number) =>
+    `Remove ${name}? ${tabs === 1 ? "1 open tab" : `${tabs} open tabs`} will be closed.`,
   removeAccountConfirm: (n: number) =>
     n === 1
       ? "1 host uses this account. It will keep the current credentials and be unlinked."

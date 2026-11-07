@@ -2,6 +2,8 @@ import { useMemo } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { strings } from "../../lib/strings";
 import { sortedAccounts, visibleGroups } from "../../lib/libraryView";
+import { connectHost } from "../../terminal/sessionController";
+import type { Host } from "../../types/models";
 import { useAppStore } from "../../store/useAppStore";
 import { toggleGroupCollapsed } from "../../store/slices/librarySlice";
 import { HostRow } from "./HostRow";
@@ -26,7 +28,7 @@ export function SourceListView() {
   const groups = useMemo(() => visibleGroups(hosts, filter), [hosts, filter]);
   const shownAccounts = useMemo(() => sortedAccounts(accounts), [accounts]);
 
-  const onConnect = () => store.getState().pushToast(strings.comingSoon); // Stage 4
+  const onConnect = (host: Host) => void connectHost(host);
 
   const tab = (value: "hosts" | "accounts", label: string) => (
     <button

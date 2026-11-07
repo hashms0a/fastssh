@@ -3327,14 +3327,15 @@ this stage touched.)
 
 
 ================================================================================
- 10. TESTING WORKFLOW (end of every stage from Stage 0B on)
+ 10. TESTING WORKFLOW (incremental, per-stage)
 ================================================================================
 
-Tiers (rule 3): a) fast checks while working, b) tools/verify.sh once per
-stage, c) the Acceptance bullets, each proven as its tag says. The steps
-below apply ONLY where the Test Matrix (Section 4) says so.
+This section is a CATALOG of verification actions, NOT a checklist to run
+verbatim at every stage. Each stage's Acceptance criteria in Section 5
+references the specific items from this catalog that apply. The agent
+follows Rules 3, 12-14 (above) when running them.
 
-Acceptance tags (every bullet in Stages 3-10 has one):
+ACCEPTANCE TAGS (how each Acceptance bullet is proven)
   [unit]  A vitest or cargo test proves it. Name the test in the handoff.
           No manual run is needed.
   [e2e]   An assertion in the stage's e2e spec proves it. Name the `it`
@@ -3350,87 +3351,151 @@ Acceptance tags (every bullet in Stages 3-10 has one):
   missing), fall back to the next one ([e2e] -> [agent] screenshot + log)
   and say so in the handoff.
 
-1.  Test target (only in stages with Docker = yes).
+CATALOG OF VERIFICATION ACTIONS
+
+V1.  Test target / Docker sshd (only in stages with Docker = yes)
+     - Start the test sshd container:
          docker start fastssh-sshd 2>/dev/null || docker run -d --name fastssh-sshd -p 127.0.0.1:2222:22 fastssh-test-sshd
          docker ps --filter name=fastssh-sshd --format '{{.Status}}'    (must say "Up")
-    Rebuild the image only if tools/test-sshd/Dockerfile or big.txt
-    changed. Run `bash tools/make_fixtures.sh` only if files in
-    ~/fastssh-testenv are missing. It is cheap and idempotent, and
-    --reset wipes only the sandbox. e2e specs load the fixture set they
-    need themselves (step 6). For a manual run:
+     - Rebuild the image only if tools/test-sshd/Dockerfile or big.txt
+       changed. Run `bash tools/make_fixtures.sh` only if files in
+       ~/fastssh-testenv are missing. It is cheap and idempotent, and
+       --reset wipes only the sandbox. e2e specs load the fixture set they
+       need themselves (V6).
+     - For a manual run:
          cp ~/fastssh-testenv/legacy/*.json ~/fastssh-testenv/config/
-2.  Manual run (only for [agent] bullets that need a running app):
-         tools/build-debug.sh       (skip it if verify.sh just built and no code changed)
-         ./tools/dev-sandbox.sh debug > /tmp/fastssh-run.log 2>&1 &
-         sleep 4; pgrep -af 'target/debug/fastssh'     (must show one process)
-    Stop it with `pkill -TERM -f target/debug/fastssh` when you are done.
-    Use `./tools/dev-sandbox.sh dev` (hot reload) only to iterate on UI,
-    never for acceptance.
-3.  Permission error path (Perm column). Prefer unit tests: Rust writes
-    into a temp dir with mode 0500 and expects an AppError naming the
-    path, and vitest makes save_* reject and expects the error toast and
-    the revert. Only Stages 1 and 12 also test it live:
+     Gate: skip this at stages where the Test Matrix says Docker = no.
+
+V2.  Debug binary launch (manual run, only for [agent] bullets that need
+     a running app)
+     - tools/build-debug.sh       (skip it if verify.sh just built and no code changed)
+     - ./tools/dev-sandbox.sh debug > /tmp/fastssh-run.log 2>&1 &
+     - sleep 4; pgrep -af 'target/debug/fastssh'     (must show one process)
+     - Stop with `pkill -TERM -f target/debug/fastssh` when done.
+     - Use `./tools/dev-sandbox.sh dev` (hot reload) only to iterate on
+       UI, never for acceptance.
+     Gate: run only when an Acceptance bullet requires a running app and
+     is tagged [agent]. Do NOT run this for [unit] or [e2e] bullets.
+
+V3.  Permission error path (Perm column)
+     - Prefer unit tests: Rust writes into a temp dir with mode 0500 and
+       expects an AppError naming the path, and vitest makes save_* reject
+       and expects the error toast and the revert.
+     - Only Stages 1 and 12 also test it live:
          chmod 500 ~/fastssh-testenv/config    (saving must show an error toast)
          chmod 700 ~/fastssh-testenv/config    (restore)
-    verify.sh's smoke step and e2e catch capability errors ("not
-    allowed"). Grep for them yourself only when an action silently does
-    nothing:
+     - verify.sh's smoke step and e2e catch capability errors ("not
+       allowed"). Grep for them yourself only when an action silently does
+       nothing:
          grep -i 'not allowed' /tmp/fastssh-run.log ~/.local/share/io.github.fastssh.app/logs/*.log
-4.  Launch check: verify.sh does it automatically. It runs the app in the
-    sandbox for 8 s and fails on "panicked", "not allowed", "symbol
-    lookup" or an early exit.
-5.  Screenshots (budget: rule 12). Take them only of new visible UI that
-    tests can't assert (layout, colors, a native window).
+     Gate: run only when the Test Matrix has Perm = yes or unit for this
+     stage. Unit tests cover it at every other stage.
+
+V4.  Launch smoke check (every stage from 0B)
+     - verify.sh does it automatically. It runs the app in the sandbox for
+       8 s and fails on "panicked", "not allowed", "symbol lookup" or an
+       early exit.
+     Gate: run at every stage from 0B onward (verify.sh includes it). Do
+     NOT add a separate manual check.
+
+V5.  Screenshot capture (budget: rule 12)
+     - Take them only of new visible UI that tests can't assert (layout,
+       colors, a native window).
          tools/screenshot.sh docs/screenshots/stage_NN/<name>.png window
          tools/screenshot.sh docs/screenshots/stage_NN/<name>.png full    (other windows, e.g. a file manager)
-    In e2e: await browser.saveScreenshot('docs/screenshots/stage_NN/x.png')
-    (webview only; works on every desktop). If screenshot.sh exits with
-    code 2, use the e2e one.
-6.  E2E (WebdriverIO). These rules keep it fast and reliable:
-      - One spec file per stage. While you develop it, run only that spec:
-            tools/build-debug.sh && npx wdio run e2e/wdio.conf.ts --spec e2e/specs/<name>.e2e.ts
-        Rebuild only when app code changed. Edits to the spec alone need
-        no rebuild.
-      - Each spec's before() calls resetSandbox('<set>') from
-        e2e/helpers.ts and then browser.reloadSession(), so the app
-        restarts on known data. resetSandbox empties
-        ~/fastssh-testenv/config and copies in one fixture set: empty,
-        legacy, big, bad, or sshconfig (re-runs make_fixtures.sh). Specs
-        never depend on each other.
-      - Wait with $(sel).waitForExist({ timeout: 5000 }) or
-        browser.waitUntil(..., { timeout: 10000 }). Never use
-        browser.pause() for longer than 500 ms. The mocha timeout is 30 s,
-        and bail is on.
-      - Find elements by data-testid: $('[data-testid="landing-connect"]').
-        Keys: await browser.keys(['Control', 'Shift', 't']). Double-click:
-        (await $(sel)).doubleClick(). Right-click: .click({ button:
-        'right' }). Never click by pixel coordinates.
-      - Read terminal state through window.__fastsshTest (Stage 4 notes)
-        instead of taking screenshots.
-      - Read files with node:fs inside the spec (e.g. the sandbox
-        hosts.json). Run shell checks with child_process.execSync (e.g.
-        `ps -eo args`, `docker stop`). This turns most former manual checks
-        into [e2e].
-      - Restart the app inside a spec with browser.reloadSession(), for
-        persistence and restore checks.
-7.  Window states (Win column): in e2e, browser.setWindowSize(800, 500).
-    Maximize and fullscreen through the window API with browser.execute.
-    Assert that nothing overflows (scrollWidth <= clientWidth on the
-    header, sidebar and tab bar) and that the terminal's cols changed.
-    Take screenshots of this only in Stage 12.
-8.  Persistence (Kill column):
+     - In e2e: await browser.saveScreenshot('docs/screenshots/stage_NN/x.png')
+       (webview only; works on every desktop). If screenshot.sh exits with
+       code 2, use the e2e one.
+     Gate: max shots per stage as listed in the Test Matrix (Shots column).
+     Stage 12 is excepted (all listed shots). Do NOT screenshot something
+     an assertion can prove.
+
+V6.  E2E (WebdriverIO)
+     - One spec file per stage. While you develop it, run only that spec:
+           tools/build-debug.sh && npx wdio run e2e/wdio.conf.ts --spec e2e/specs/<name>.e2e.ts
+       Rebuild only when app code changed. Edits to the spec alone need
+       no rebuild.
+     - Each spec's before() calls resetSandbox('<set>') from
+       e2e/helpers.ts and then browser.reloadSession(), so the app
+       restarts on known data. resetSandbox empties
+       ~/fastssh-testenv/config and copies in one fixture set: empty,
+       legacy, big, bad, or sshconfig (re-runs make_fixtures.sh). Specs
+       never depend on each other.
+     - Wait with $(sel).waitForExist({ timeout: 5000 }) or
+       browser.waitUntil(..., { timeout: 10000 }). Never use
+       browser.pause() for longer than 500 ms. The mocha timeout is 30 s,
+       and bail is on.
+     - Find elements by data-testid: $('[data-testid="landing-connect"]').
+       Keys: await browser.keys(['Control', 'Shift', 't']). Double-click:
+       (await $(sel)).doubleClick(). Right-click: .click({ button:
+       'right' }). Never click by pixel coordinates.
+     - Read terminal state through window.__fastsshTest (Stage 4 notes)
+       instead of taking screenshots.
+     - Read files with node:fs inside the spec (e.g. the sandbox
+       hosts.json). Run shell checks with child_process.execSync (e.g.
+       `ps -eo args`, `docker stop`). This turns most former manual checks
+       into [e2e].
+     - Restart the app inside a spec with browser.reloadSession(), for
+       persistence and restore checks.
+     Gate: run only the stage's own spec (one file). At milestone stages
+     (Test Matrix, Section 4: 5, 8, 10, 11, 12) run the full suite with
+     `E2E_ALL=1 tools/verify.sh full`. Do NOT run every spec at every
+     stage.
+
+V7.  Window states (Win column)
+     - In e2e: browser.setWindowSize(800, 500). Maximize and fullscreen
+       through the window API with browser.execute. Assert that nothing
+       overflows (scrollWidth <= clientWidth on the header, sidebar and
+       tab bar) and that the terminal's cols changed.
+     - Take screenshots of this only in Stage 12.
+     Gate: run only when the Test Matrix lists a Win check for this stage.
+     Value varies: "max" means maximize test, "F11" means fullscreen
+     toggle, "resize" means setWindowSize assertion, "all" means all of
+     the above (Stage 12).
+
+V8.  Persistence / kill-relaunch (Kill column)
          pkill -TERM -f 'target/debug/fastssh'   (graceful: close handlers run)
          pkill -KILL -f 'target/debug/fastssh'   (crash: data must still be valid JSON)
          python3 -I -m json.tool ~/fastssh-testenv/config/settings.json > /dev/null && echo VALID
-    Relaunch and confirm that the stage's persisted state is back.
-9.  Debugging (only when something fails):
+     - Relaunch and confirm that the stage's persisted state is back.
+     Gate: run only when the Test Matrix has Kill = yes for this stage.
+     The TERM check proves graceful quit (close handlers run). The KILL
+     check proves atomic writes survive a crash.
+
+V9.  Debugging (only when something fails)
          grep -nE 'panicked|ERROR|not allowed|symbol lookup' /tmp/fastssh-run.log /tmp/fastssh-verify.log
          tail -n 200 ~/.local/share/io.github.fastssh.app/logs/*.log | grep -v DEBUG
-    For WebKit or rendering issues, rerun with WEBKIT_DEBUG=all. To see the
-    child processes: ps -o pid,args --ppid $(pgrep -f target/debug/fastssh)
-10. Native file dialogs can't be driven by WebDriver. Tests type the path
-    into the text field. Opening the real dialog and picking a file is a
-    [human] item. Do not spend agent time on it.
+     - For WebKit or rendering issues, rerun with WEBKIT_DEBUG=all. To see
+       the child processes:
+         ps -o pid,args --ppid $(pgrep -f target/debug/fastssh)
+     Gate: NEVER run proactively. Only run these greps after a failure to
+     narrow the cause. Do not add them to any stage's acceptance list.
+
+V10. Native file dialogs (fallback to [human])
+     - Can't be driven by WebDriver. Tests type the path into the text
+       field. Opening the real dialog and picking a file is a [human]
+       item. Do not spend agent time on it.
+     Gate: only when an Acceptance bullet requires a native dialog. Mark
+     it [human] in the handoff and move on.
+
+GATING RULES (which checks run at which stages)
+
+  - Stage 0A:  V1 only.
+  - Stage 0B:  V2, V4, V5 (1 shot), V6 (smoke spec).
+  - Stage 1:   V3 (unit), V4, V5 (1 shot), V8.
+  - Stage 2:   V4, V5 (2 shots), V7 (max).
+  - Stage 3:   V3 (unit), V4, V5 (1 shot), V6 (library spec).
+  - Stage 4:   V4, V5 (1 shot), V6 (terminal spec), V7 (resize).
+  - Stage 5:   V1, V4, V5 (1 shot), V6 (ssh spec). Milestone: V6 all.
+  - Stage 6:   V4, V5 (1 shot), V6 (tools spec), V7 (F11).
+  - Stage 7:   V1, V4, V5 (1 shot), V6 (bookmarks spec).
+  - Stage 8:   V1, V4, V5 (1 shot), V6 (preferences spec), V7 (max),
+               V8. Milestone: V6 all.
+  - Stage 9:   V1, V4, V5 (0 shots), V6 (sshconfig spec).
+  - Stage 10:  V4, V5 (1 shot), V6 (gpg spec). Milestone: V6 all.
+  - Stage 11:  V4-V6 as applicable, V5 (1 per item).
+  - Stage 12:  V1, V3 (live), V4, V5 (as listed), V6 (all), V7 (all),
+               V8.
 
 [human] items that cannot be proven on a single machine (list them under
 "Check on a real device" in the handoff and collect them in

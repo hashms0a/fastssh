@@ -1,15 +1,14 @@
 import { strings } from "../../lib/strings";
 import { editHost, removeHost } from "../../lib/editorActions";
+import { connectHost } from "../../terminal/sessionController";
 import type { Host } from "../../types/models";
-import { useAppStore } from "../../store/useAppStore";
 
 /**
  * The landing card for a selected host with no tabs (R10): name,
- * user@host:port, and Connect / Edit / Remove. Connect wires to the PTY
- * in Stage 4; Edit/Remove drive the Stage 3 editor.
+ * user@host:port, and Connect / Edit / Remove. Connect opens a tab in the
+ * host's notebook (Stage 4); Edit/Remove drive the Stage 3 editor.
  */
 export function ConnectionLanding({ host }: { host: Host }) {
-  const pushToast = useAppStore((s) => s.pushToast);
   return (
     <div
       data-testid="connection-landing"
@@ -27,7 +26,7 @@ export function ConnectionLanding({ host }: { host: Host }) {
           type="button"
           data-testid="landing-connect"
           className="flex-1 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
-          onClick={() => pushToast(strings.comingSoon)} // Stage 4
+          onClick={() => void connectHost(host)}
         >
           {strings.connect}
         </button>
