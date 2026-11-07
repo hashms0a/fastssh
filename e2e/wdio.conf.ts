@@ -25,15 +25,15 @@ export const config: WebdriverIO.Config = {
     {
       browserName: "tauri",
       "tauri:options": {
-        // e2e always runs the DEBUG binary; build it first with
-        // npm run tauri build -- --debug --no-bundle
-        application: "./src-tauri/target/debug/fastssh",
+        // e2e always runs the DEBUG binary built by tools/build-debug.sh.
+        application: process.env.E2E_APP ?? "./src-tauri/target/debug/fastssh",
       },
     } as WebdriverIO.Capabilities,
   ],
   framework: "mocha",
   reporters: ["spec"],
+  waitforTimeout: 5000,
   // The tauri driver's window-focus hook intermittently fails with CDP 404s;
   // one retry absorbs it without hiding real regressions.
-  mochaOpts: { timeout: 120000, retries: 1 },
+  mochaOpts: { timeout: 30000, bail: true, retries: 1 },
 };

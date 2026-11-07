@@ -59,6 +59,8 @@ echo '{"not":"an array"}' > "$T/bad/bookmarks.json"      # wrong top-level type
 echo '{"windowWidth":"abc","scrollbackLines":99999999,"panelSize":-5}' > "$T/bad/settings.json"
 echo 'not gpg data' > "$T/bad/hosts.json.gpg"            # unsupported/corrupt gpg
 touch "$T/config/.hosts.json.swp"                         # hidden file to ignore
+# Generated only when missing: both are expensive to rebuild (revision 2).
+if [[ ! -f "$T/big/hosts.json" ]]; then
 python3 -I - "$T/big/hosts.json" <<'EOF'
 import json, sys
 hosts = [{"name": f"node{i}", "host": f"10.1.{i//250}.{i%250}", "port": str(22 + i % 3),
@@ -67,7 +69,10 @@ hosts = [{"name": f"node{i}", "host": f"10.1.{i//250}.{i%250}", "port": str(22 +
           "account": ""} for i in range(2000)]
 json.dump(hosts, open(sys.argv[1], "w"))
 EOF
-head -c 50M /dev/urandom | base64 > "$T/sshd/big.txt"     # large terminal output
+fi
+if [[ ! -f "$T/sshd/big.txt" ]]; then
+  head -c 50M /dev/urandom | base64 > "$T/sshd/big.txt"    # large terminal output
+fi
 cat > "$T/sshd/Dockerfile" <<'EOF'
 FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y --no-install-recommends openssh-server \

@@ -5,6 +5,40 @@
  multiplexer for Ubuntu (GNOME) and Kubuntu (KDE Plasma), shipped as an AppImage.
 ================================================================================
 
+REVISION 2 (2026-11-07): FASTER TESTING
+  This revision changes HOW stages are verified, not WHAT is built. The
+  product requirements, technical decisions and reference code are
+  unchanged, except for the two bug fixes at the end of this list.
+  - Rule 3: testing is tiered. While working, run only the fast checks for
+    what you touched. At the end of a stage, run ONE gate script
+    (tools/verify.sh) once. While fixing a failure, re-run only the
+    failing step.
+  - Section 4 has a TEST MATRIX. Docker, chmod, kill/relaunch and
+    window-state checks run only in the stages that need them, not in
+    every stage.
+  - Every Acceptance bullet (Stages 3-10) is tagged [unit], [e2e],
+    [agent] or [human] (Section 10). [human] items never block a stage.
+    Checks that used to be manual are now unit tests or e2e assertions.
+  - Each stage runs only its own e2e spec. The full e2e suite runs at the
+    milestone stages only (5, 8, 10, 11, 12).
+  - Screenshot budget: at most 2 per stage (Stage 12 excepted).
+  - Session start no longer rebuilds and re-tests everything.
+  - Rules 13 and 14 are new: time-box stuck checks, and never repeat a
+    check that already passed.
+  - make_fixtures.sh no longer regenerates the 68 MB file and the
+    2000-host file on every run.
+  - Faster Rust debug builds (less debug info).
+  - Bug fix: `tauri build --debug` runs `vite build` in PRODUCTION mode,
+    so the e2e test hook gated on import.meta.env.DEV was never included.
+    The e2e binary is now built with Vite mode "e2e" (tools/build-debug.sh).
+  - Bug fix: a session prompt contained a sudo password, which contradicted
+    rule 10. It was removed. Never put credentials in this file.
+  - Fix: Stage 8 restored Localhost tabs in its e2e test, although its own
+    notes say that Localhost tabs are not restored. The test now uses ssh
+    hosts.
+  APPLYING THIS REVISION TO A PROJECT ALREADY IN PROGRESS: do Stage 3,
+  task 3.0 first, whatever stage is in progress, then continue that stage.
+
 Assumptions (inputs that were missing; defaults chosen, see Section 2):
   - <PLAN_DIR> means the folder that holds this plan file and the spec
     (fastssh_tauri_v2_agent_specification.md). The project root is
@@ -43,20 +77,35 @@ Assumptions (inputs that were missing; defaults chosen, see Section 2):
 2.  Do ONLY the stage you were asked to do. Change earlier code only when the
     current stage needs it. Record each such change under "Deviations" in the
     handoff.
-3.  Before you finish a stage, run these from the project root, in order.
-    Each one MUST succeed:
-         npm install                         (lock file must not churn without reason)
-         npm run format                      (prettier --write)
-         npm run lint                        (0 errors, 0 warnings)
-         npm run typecheck                   (tsc --noEmit, 0 errors)
-         npm test                            (vitest run, all pass)
-         cd src-tauri && cargo fmt --check && cd ..
-         cd src-tauri && cargo clippy --all-targets -- -D warnings && cd ..
-         cd src-tauri && cargo test && cd ..
-         npm run tauri build -- --debug --no-bundle
-         npm run e2e                         (from Stage 0B on, if tauri-driver exists)
-    Then follow Section 10 (Testing workflow). If a command can't run in this
-    environment, write the exact error in the handoff. Do NOT claim it passed.
+3.  Testing is TIERED. Never run more than the current tier needs.
+    a) WHILE WORKING (after each task, or after changing a file): run
+       only the fast checks for what you touched. Examples:
+         npx vitest run src/lib/tunnels.test.ts       (one TS test file)
+         npm run typecheck                            (after TS changes)
+         cd src-tauri && cargo check && cd ..         (after Rust changes)
+         cd src-tauri && cargo test tunnels && cd ..  (Rust tests whose name matches)
+       Do NOT run clippy, `tauri build`, `npm install` or any e2e spec
+       in this loop.
+    b) STAGE GATE (once, after all tasks of the stage are written):
+         tools/verify.sh full <spec>       e.g.  tools/verify.sh full library
+       It runs these steps in order and stops at the first failure: npm
+       install (only if package-lock.json changed), prettier, eslint (0
+       warnings), tsc, vitest, cargo fmt, clippy -D warnings, cargo test,
+       the real-files guard, the debug build (tools/build-debug.sh), an 8 s
+       launch smoke test in the sandbox, and then the e2e spec(s) you
+       named. It prints one OK/FAIL line per step and saves the full output
+       to /tmp/fastssh-verify.log.
+       On FAIL: fix it and re-run ONLY that step's command until it passes.
+       Then run tools/verify.sh full once more at the end.
+       Use `tools/verify.sh quick` (no build, no e2e) for a mid-stage
+       sanity check after a large refactor.
+       At milestone stages (Test Matrix, Section 4):
+         E2E_ALL=1 tools/verify.sh full
+    c) ACCEPTANCE: prove each Acceptance bullet in the way its tag says
+       (Section 10). Most bullets are already proven by the tests that ran
+       in a) and b). Do not check them again by hand.
+    If a command can't run in this environment, write the exact error in
+    the handoff. Do NOT claim it passed.
 4.  A stage is NOT complete until docs/handoff/HANDOFF_STAGE_<NN>.md exists.
     Use the template in Section 9. Stage 0 writes HANDOFF_STAGE_00.md, Stage 1
     writes HANDOFF_STAGE_01.md, and so on.
@@ -105,9 +154,22 @@ Assumptions (inputs that were missing; defaults chosen, see Section 2):
 11. Git: the repository is fastssh/. At the end of each stage, run:
          git add -A && git commit -m "Stage NN: <title>"
     Never commit private keys, the sandbox, or target/ and node_modules/.
-12. Never guess what the UI looks like. Take a screenshot (Section 10, step 5)
-    and open the PNG with your image-reading tool. Describe what you see in
-    the handoff.
+12. Never guess what the UI looks like, but never screenshot something a
+    test can assert. Budget: at most 2 screenshots per stage (Stage 12
+    excepted), and only of NEW visible UI. Open each PNG with your
+    image-reading tool and describe it in one line in the handoff. If your
+    model cannot read images, take no screenshots. List the visual checks
+    as [human] items in the handoff instead.
+13. Time-box. If a check still fails after 3 focused fix attempts (or
+    about 45 minutes), stop working on it. Under "Known issues", record
+    the exact failure, what you tried and your best guess at the cause.
+    Mark that bullet FAIL and continue with the rest of the stage. Set
+    Status to "Partially complete" only if a [unit] or [e2e] bullet fails.
+    Never rewrite working code from an earlier stage to chase one failing
+    check.
+14. Do not repeat work. Do not re-run a check that passed in this session
+    unless code it covers has changed since. Do not re-verify earlier
+    stages unless the Test Matrix marks this stage as a milestone.
 
 
 ================================================================================
@@ -340,8 +402,8 @@ fastssh/
   eslint.config.js              # flat config, typescript-eslint, react-hooks
   .prettierrc.json  .gitignore
   docs/
-    FASTSSH_BUILD_PLAN.txt	# copy of this plan
-    fastssh_tauri_v2_agent_specification.md	# copy of fastssh_tauri_v2_agent_specification.md
+    BUILD_PLAN.txt              # copy of this plan (replace it when the plan is revised)
+    SPEC.md                     # copy of fastssh_tauri_v2_agent_specification.md
     MANUAL_CHECKS.md            # things only a human can verify (Stage 12)
     handoff/HANDOFF_STAGE_NN.md # one per stage
     screenshots/stage_NN/*.png
@@ -349,6 +411,8 @@ fastssh/
     make_fixtures.sh            # builds ~/fastssh-testenv sandbox + fixtures
     screenshot.sh               # desktop-aware screenshot (GNOME/KDE/X11)
     dev-sandbox.sh              # runs the app with sandbox env vars
+    verify.sh                   # stage gate: lint, tests, build, smoke, e2e (rule 3)
+    build-debug.sh              # debug binary, Vite mode "e2e" (test hook included)
     test-sshd/Dockerfile        # Ubuntu 24.04 + openssh-server test target
     appimage-jammy/Dockerfile   # 22.04 release build image (Stage 12)
     build-appimage-jammy.sh     # runs the release build in that image
@@ -480,9 +544,36 @@ Stage 11  Recommended enhancements (optional, P1 -> P3).
 Stage 12  Polish, error-handling review, accessibility, icon, full tests,
           22.04 AppImage release build, README.                       (R21)
 
-Every stage ends with an app that builds, passes all tests and runs in the
-sandbox. Each stage below lists: Goal, Tasks, Reference code, Notes,
-Acceptance.
+Every stage ends with an app that builds, passes its stage gate (rule 3)
+and runs in the sandbox. Each stage below lists: Goal, Tasks, Reference
+code, Notes, Acceptance.
+
+TEST MATRIX (what each stage verifies; Section 10 explains each column)
+  Docker = start the fastssh-sshd container (Section 10, step 1). Leave it
+           stopped in the other stages.
+  Spec   = the e2e spec(s) to pass to `tools/verify.sh full <spec>`.
+  ALL    = milestone stage: also run the whole suite (E2E_ALL=1).
+  Perm   = the read-only-folder error path (step 3). "unit" means a test
+           with a temp dir proves it, with no chmod on the sandbox.
+  Kill   = graceful quit plus a SIGKILL relaunch (step 8).
+  Win    = window-state checks (step 7).
+  Shots  = maximum number of screenshots.
+
+  Stage | Docker | Spec        | ALL | Perm | Kill | Win    | Shots
+  ------+--------+-------------+-----+------+------+--------+-------
+  0B    | no     | smoke       | -   | -    | -    | -      | 1
+  1     | no     | smoke       | -   | yes  | yes  | max    | 1
+  2     | no     | smoke       | -   | -    | -    | -      | 2
+  3     | no     | library     | -   | unit | -    | -      | 1
+  4     | no     | terminal    | -   | -    | -    | resize | 1
+  5     | yes    | ssh         | yes | -    | -    | -      | 1
+  6     | no     | tools       | -   | -    | -    | F11    | 1
+  7     | yes    | bookmarks   | -   | -    | -    | -      | 1
+  8     | yes    | preferences | yes | -    | yes  | -      | 1
+  9     | yes    | sshconfig   | -   | unit | -    | -      | 0
+  10    | no     | gpg         | yes | -    | -    | -      | 1
+  11    | if needed | per item | yes | -    | -    | -      | 1 per item
+  12    | yes    | all         | yes | yes  | yes  | all    | as listed
 
 
 ================================================================================
@@ -733,6 +824,7 @@ echo '{"not":"an array"}' > "$T/bad/bookmarks.json"      # wrong top-level type
 echo '{"windowWidth":"abc","scrollbackLines":99999999,"panelSize":-5}' > "$T/bad/settings.json"
 echo 'not gpg data' > "$T/bad/hosts.json.gpg"            # unsupported/corrupt gpg
 touch "$T/config/.hosts.json.swp"                         # hidden file to ignore
+if [[ ! -s "$T/big/hosts.json" ]]; then                   # generated once, then kept
 python3 -I - "$T/big/hosts.json" <<'EOF'
 import json, sys
 hosts = [{"name": f"node{i}", "host": f"10.1.{i//250}.{i%250}", "port": str(22 + i % 3),
@@ -741,7 +833,9 @@ hosts = [{"name": f"node{i}", "host": f"10.1.{i//250}.{i%250}", "port": str(22 +
           "account": ""} for i in range(2000)]
 json.dump(hosts, open(sys.argv[1], "w"))
 EOF
-head -c 50M /dev/urandom | base64 > "$T/sshd/big.txt"     # large terminal output
+fi
+# Generated once. Keeping it stable also keeps the docker image cache valid.
+[[ -s "$T/sshd/big.txt" ]] || head -c 50M /dev/urandom | base64 > "$T/sshd/big.txt"
 cat > "$T/sshd/Dockerfile" <<'EOF'
 FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y --no-install-recommends openssh-server \
@@ -1056,11 +1150,12 @@ export const config: WebdriverIO.Config = {
   port: 4444,
   capabilities: [{
     // Some wdio versions also need browserName; check the Tauri docs.
-    'tauri:options': { application: '../src-tauri/target/debug/fastssh' },
+    'tauri:options': { application: process.env.E2E_APP ?? '../src-tauri/target/debug/fastssh' },
   } as WebdriverIO.Capabilities],
   framework: 'mocha',
   reporters: ['spec'],
-  mochaOpts: { timeout: 60000 },
+  mochaOpts: { timeout: 30000, bail: true },   // fail fast; no 60 s hangs
+  waitforTimeout: 5000,
   beforeSession: () => {
     driver = spawn(path.join(os.homedir(), '.cargo/bin/tauri-driver'), [], {
       stdio: [null, process.stdout, process.stderr],
@@ -1072,9 +1167,10 @@ export const config: WebdriverIO.Config = {
 };
 ```
 Notes:
-  - e2e always runs the DEBUG binary. Build it first with
-    `npm run tauri build -- --debug --no-bundle`. A stale binary gives
-    misleading passes. Note the binary's mtime in the handoff.
+  - e2e always runs the DEBUG binary built by tools/build-debug.sh (Vite
+    mode "e2e", so the test hook exists; see Stage 4). A stale binary
+    gives misleading passes, so verify.sh always rebuilds before e2e. When
+    you iterate on a spec alone, rebuild only if app code changed.
   - The capability file name in $schema exists only after the first build.
     A red squiggle before that is fine.
 
@@ -1522,6 +1618,38 @@ validation. Changes are saved at once, and account edits propagate to linked
 hosts.
 
 Tasks:
+3.0  APPLY REVISION 2. Do this once, before any other work, in whatever
+     stage is in progress. Skip it if tools/verify.sh already exists.
+     Commit it on its own as "Plan revision 2: faster test workflow".
+     a. Replace docs/BUILD_PLAN.txt with this file. Update CLAUDE.md: its
+        copy of rule 3 must be the NEW rule 3, and add rules 12-14.
+     b. Add tools/verify.sh and tools/build-debug.sh (references below).
+        Run chmod +x tools/*.sh. Check with `npm run tauri build -- --help`
+        that --config accepts inline JSON.
+     c. package.json scripts: add
+          "verify": "tools/verify.sh full",
+          "verify:quick": "tools/verify.sh quick",
+          "e2e:one": "wdio run e2e/wdio.conf.ts --spec"
+        (usage: npm run e2e:one -- e2e/specs/library.e2e.ts).
+     d. src-tauri/Cargo.toml, for faster debug builds and links (this
+        costs one full rebuild, once):
+          [profile.dev]
+          debug = "line-tables-only"
+          [profile.dev.package."*"]
+          debug = false
+     e. .prettierignore: src-tauri/target, src-tauri/gen, dist,
+        docs/screenshots, docs/*.txt, package-lock.json.
+     f. e2e/wdio.conf.ts: mochaOpts { timeout: 30000, bail: true },
+        waitforTimeout 5000, and application = process.env.E2E_APP or the
+        debug binary (see the 0B reference). e2e/helpers.ts: add
+        resetSandbox(set), where set is 'empty' | 'legacy' | 'big' | 'bad'
+        | 'sshconfig' (Section 10, step 6).
+     g. tools/make_fixtures.sh: generate big.txt and the 2000-host file
+        only when they are missing (see the Stage 0A reference). Copy the
+        new version to ~/fastssh-testenv/ too.
+     h. Run `tools/verify.sh full smoke`. It must pass before Stage 3 work
+        continues. Keep the Stage 3 work that is already done. Prove it
+        with the tagged Acceptance list below. Do not redo it.
 3.1  lib/hostUtils.ts: normalizeName (trim, whitespace runs become "-"),
      validateHost(draft, allHosts, editingId) returns a list of
      { field, messageKey }. Rules: the name is required and unique
@@ -1589,6 +1717,76 @@ Tasks:
      propagation). e2e library.e2e.ts: add a host, see it in the sidebar,
      edit its port, duplicate it, remove it.
 
+Reference: tools/verify.sh (task 3.0)
+```bash
+#!/usr/bin/env bash
+# Stage gate (plan rule 3). Output is short; the details go to $LOG.
+# Usage: tools/verify.sh quick            format, lint, types, unit tests (no build)
+#        tools/verify.sh full [spec...]   + debug build, launch smoke, e2e specs
+#        E2E_ALL=1 tools/verify.sh full   + the whole e2e suite (milestone stages)
+set -uo pipefail
+cd "$(dirname "$0")/.."
+mode="${1:-quick}"; shift || true
+T="${FASTSSH_TESTENV:-$HOME/fastssh-testenv}"
+LOG=/tmp/fastssh-verify.log; : > "$LOG"
+step() {
+  local name="$1"; shift; local t0=$SECONDS
+  printf '%-14s ' "$name"; echo "===== $name" >> "$LOG"
+  if "$@" >> "$LOG" 2>&1; then echo "OK   $((SECONDS - t0))s"
+  else echo "FAIL $((SECONDS - t0))s  (full output: $LOG)"; tail -n 40 "$LOG"; exit 1; fi
+}
+guard() {   # the owner's real files must not change (rule 10)
+  local now; now=$(stat -c '%n %s %Y' ~/.ssh/config ~/.ssh/known_hosts \
+                   ~/.config/easyssh/* ~/.config/fastssh/* 2>/dev/null || true)
+  # The baseline is made on the first run. If the OWNER changed these files
+  # on purpose, delete $T/realfiles.baseline to accept the change.
+  [[ -f "$T/realfiles.baseline" ]] || echo "$now" > "$T/realfiles.baseline"
+  diff <(echo "$now") "$T/realfiles.baseline"
+}
+smoke() {   # 8 s sandbox launch; the app must still be running at the end
+  timeout 8 ./tools/dev-sandbox.sh debug > /tmp/fastssh-run.log 2>&1; local rc=$?
+  cat /tmp/fastssh-run.log
+  [[ $rc == 124 ]] || { echo "app exited early (code $rc)"; return 1; }
+  ! grep -qiE 'panicked|not allowed|symbol lookup' /tmp/fastssh-run.log
+}
+if [[ ! -d node_modules || package-lock.json -nt node_modules/.package-lock.json ]]; then
+  step "npm install" npm install --no-audit --no-fund
+fi
+step "prettier"    npm run format
+step "eslint"      npm run lint
+step "tsc"         npm run typecheck
+step "vitest"      npm test
+step "cargo fmt"   bash -c 'cd src-tauri && cargo fmt'
+step "clippy"      bash -c 'cd src-tauri && cargo clippy --all-targets -- -D warnings'
+step "cargo test"  bash -c 'cd src-tauri && cargo test'
+step "real files"  guard
+[[ $mode == full ]] || { echo "quick verify: all OK"; exit 0; }
+step "debug build" tools/build-debug.sh
+step "smoke"       smoke
+if [[ ${E2E_ALL:-0} == 1 ]]; then
+  step "e2e (all)" npm run e2e
+else
+  for s in "$@"; do step "e2e $s" npx wdio run e2e/wdio.conf.ts --spec "e2e/specs/$s.e2e.ts"; done
+fi
+echo "full verify: all OK"
+```
+
+Reference: tools/build-debug.sh (task 3.0)
+```bash
+#!/usr/bin/env bash
+# Debug binary for manual runs and e2e. `tauri build --debug` normally runs
+# `vite build` in PRODUCTION mode (import.meta.env.DEV is false). Here Vite
+# runs in mode "e2e", so the window.__fastsshTest hook is included.
+# Release builds never use this script.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+exec npm run tauri build -- --debug --no-bundle \
+  --config '{"build":{"beforeBuildCommand":"npm run build -- --mode e2e"}}'
+```
+(npm appends "-- --mode e2e" to the end of the "build" script, which
+gives "tsc && vite build --mode e2e". Check that the build script ends
+with `vite build`.)
+
 Reference: src/lib/sshConfigBlock.ts (excerpt)
 ```ts
 export interface BlockFields {
@@ -1633,27 +1831,36 @@ Notes:
   - Renaming a host must update selectedHostId-based state only by id,
     never by name. Tabs are keyed by host id (Stage 4).
 
-Acceptance:
-  - Add "web 1" (host 127.0.0.1, port 2222): it is saved as "web-1" and
-    appears in its group. hosts.json shows "port":"2222" and the
+Acceptance (tags: Section 10):
+  - [unit] normalizeName("web 1") gives "web-1". [e2e] Add "web 1" (host
+    127.0.0.1, port 2222): the sidebar shows "web-1" in its group, and the
+    sandbox hosts.json (read with node:fs) has "port":"2222" and an
     "identity-file" key.
-  - Add a second "web-1": the banner says "Name is already taken" and
-    nothing is saved. Port 70000 gives a port error. Tunnel "-L abc"
-    gives a tunnel error.
-  - Duplicate web-1: "web-1-copy". Duplicate it again: "web-1-copy-2".
-  - Edit account lab-key's username to "keyuser2": item2's
-    resolveCredentials gives keyuser2. hosts.json for item2 has username
-    keyuser2. Rename lab-key to lab: item2.account is "lab".
-  - Delete an account in use: the confirm text has the right count.
-    After confirming, the hosts keep their credentials and account is "".
-  - Type in Name/Host/Port: the ssh_config preview updates live. A
-    hand-added "ForwardAgent yes" line survives the edits.
-  - Make the config dir read-only (chmod 500 on the SANDBOX dir), then
-    save: an error toast with the OS error appears, and the sidebar
-    reverts. Restore the mode afterwards.
-  - Browse opens the system file dialog. This is checked once by
-    screenshot, and the human confirms that picking a file fills the
-    field. Typing a path works under e2e.
+  - [unit] validateHost table: a second "web-1" gives "Name is already
+    taken", port 70000 gives a port error, and tunnel "-L abc" gives a
+    tunnel error. [unit] ConnectionEditor with a mocked IPC: Save with
+    errors shows the banner, focuses the first invalid field and does NOT
+    call save_hosts.
+  - [unit] Duplicate naming: web-1 -> web-1-copy -> web-1-copy-2.
+  - [unit] Account propagation (mocked IPC; assert the save_hosts
+    payload): changing lab-key's username to "keyuser2" updates item2's
+    username, and resolveCredentials(item2) gives keyuser2. Renaming
+    lab-key to "lab" sets item2.account = "lab".
+  - [unit] Deleting an account used by N hosts: the confirm text has the
+    right N. After confirming, the hosts keep their credentials and
+    account is "".
+  - [unit] sshConfigBlock: "ForwardAgent yes" survives 10 name edits.
+    [unit] The editor's ssh_config preview updates when Name, Host or
+    Port changes.
+  - [unit] Save failure: when save_hosts rejects, an error toast shows
+    the message, the sidebar reverts, and only the latest save token
+    restores. [unit] Rust: atomic_write into a temp dir with mode 0500
+    returns an error that names the path. (No chmod on the sandbox.)
+  - [e2e] library.e2e.ts: add a host, edit its port, duplicate it and
+    remove it. The sidebar and hosts.json follow each step.
+  - [agent] One screenshot of the open ConnectionEditor (layout check).
+  - [human] Browse opens the native file dialog, and picking a file fills
+    the field.
 
 --------------------------------------------------------------------------------
 STAGE 4: PTY MANAGER, LOCAL SHELL AND HOST NOTEBOOKS
@@ -1864,11 +2071,18 @@ export const getEntry = (tabId: string) => entries.get(tabId);
 ```
 Notes:
   - E2E can't read a canvas, but the DOM renderer does render rows as
-    text. For reliable asserts, expose `window.__fastsshTest =
-    { getText, activeTabId }` ONLY when `import.meta.env.DEV` or
-    `import.meta.env.MODE === 'e2e'`. Build the e2e binary with
-    `--debug`, where Vite's mode is "development". Never ship this hook in
-    release (Stage 12 checks with a grep of dist/).
+    text. For reliable asserts, expose `window.__fastsshTest` ONLY when
+    `import.meta.env.DEV || import.meta.env.MODE === 'e2e'`.
+    IMPORTANT: `tauri build --debug` runs `vite build`, whose mode is
+    "production" (DEV is false). Build the e2e binary with
+    tools/build-debug.sh, which runs Vite in mode "e2e". Never ship this
+    hook in a release build (Stage 12 greps dist/ after a normal
+    `npm run build`).
+    Stage 4 hook API: getText(tabId), activeTabId(), cols(tabId) and
+    bufferLength(tabId). Stage 6 adds viewportY(tabId), markerLine(tabId),
+    option(tabId, name) (reads term.options[name]), readClipboard() and
+    writeCount(tabId, text) (how often write_pty sent exactly this text).
+    Add getters only. The hook must never change state.
   - React StrictMode: effects run twice in dev. createTerminal is
     idempotent, and openTab is called from user actions, never from an
     effect, so no double spawn happens.
@@ -1880,24 +2094,30 @@ Notes:
     Compare the new cols/rows with the previous ones before calling
     resize_pty.
 
-Acceptance:
-  - Double-click Localhost: a tab opens with a working shell in $HOME.
-    `echo $TERM $COLORTERM` prints "xterm-256color truecolor". `env | grep
-    -c APPDIR` prints 0.
-  - Open 3 tabs. Run `seq 1 3000` in tab 2. Switch to item10 (landing),
-    then back: tab 2 still has the full scrollback. Check by scrolling
-    up, with a screenshot.
-  - Ctrl+Shift+T opens a tab and Ctrl+Shift+W closes the focused one.
-    Holding Ctrl+Shift+T for 2 s opens exactly 1 tab.
-  - Type `exit`: the tab closes. Close the last tab: ConnectionLanding
-    appears.
-  - Resize the window: `tput cols` matches the visible width. Hidden tabs
-    never get cols=0 (log resize_pty calls at debug level and check).
-  - Close the app with 3 tabs open: no orphan shell remains.
-    Check with `pgrep -P <app pid>` before and `pgrep -f fastssh` after.
-  - `cat ~/fastssh-testenv/sshd/big.txt` in a local tab: the UI stays
-    responsive, and Ctrl+C stops it within 2 s.
-  - The HostRow badge shows 3, then 2 after a tab is closed.
+Acceptance (tags: Section 10):
+  - [unit] utf8_chunker cases. pty_manager integration (spawn, "echo hi",
+    exit event). kill_all kills every child (spawn 3 `sleep 60` sessions,
+    call kill_all, and every wait() returns). tabsSlice reducers.
+    colors/fontSpec. The shortcut handler ignores e.repeat (this replaces
+    "hold Ctrl+Shift+T for 2 s"). safeFit skips a host div of size 0.
+  - [e2e] Double-click Localhost: a tab opens. `echo $TERM $COLORTERM`
+    gives "xterm-256color truecolor", and `env | grep -c APPDIR` gives 0
+    (read with getText).
+  - [e2e] Open 3 tabs, and run `seq 1 3000` in tab 2. Select item10 (the
+    landing is visible), then select Localhost again. Tab 2's getText
+    still has the line "1" and the line "3000", so the scrollback is kept.
+    No screenshot is needed.
+  - [e2e] Ctrl+Shift+T opens a tab. Ctrl+Shift+W closes the focused one.
+  - [e2e] `exit` closes a tab. Closing the last tab shows landing-connect.
+  - [e2e] browser.setWindowSize(900, 600), then (1300, 800). After each
+    resize, the output of `tput cols` equals cols(activeTabId()).
+  - [e2e] The HostRow badge shows 3, then 2 after a tab is closed.
+  - [e2e] `cat ~/fastssh-testenv/sshd/big.txt`, wait 1 s, then send
+    Ctrl+C: the prompt returns within 10 s, and typing still works.
+  - [agent] Orphans: in each of its 3 tabs, the spec runs
+    `exec -a fastssh-probe bash`. After the e2e run ends,
+    `pgrep -af fastssh-probe` prints nothing.
+  - [agent] One screenshot: a notebook with 3 tabs.
 
 --------------------------------------------------------------------------------
 STAGE 5: SSH CONNECTIONS AND PROMPT HEURISTICS
@@ -2031,33 +2251,39 @@ Notes:
   - The fingerprint question can include "[fingerprint]". Answering "yes"
     covers both forms.
 
-Acceptance (container fastssh-sshd on 127.0.0.1:2222, legacy fixtures
-loaded, sandbox known_hosts empty):
-  - Connect item10 (tester + password): the FingerprintModal appears.
-    Click Yes. The password is sent automatically ONCE, and a prompt
-    "tester@<id>:~$" appears. `whoami` prints tester. The sandbox
-    known_hosts now has 1 line, and ~/.ssh/known_hosts is unchanged.
-  - Connect item10 again: no fingerprint modal this time.
-  - Run `sudo -k; sudo true` in that tab: the password is NOT injected
-    (the prompt waits).
-  - Type `exit`: the tab closes. It was the last one, so the landing
-    appears.
-  - item2 (account lab-key, key auth): logs in with no password and no
-    modal.
-  - Сервер-1 (port 2299): the error modal "Connection refused". Retry
-    shows it again, with ONE modal and not two. Close removes the tab.
-  - "my-server" (192.0.2.10, ConnectTimeout=5): the timeout modal appears
-    within about 6 s.
-  - Change item10's password to a wrong value: the auto-send happens
-    once, ssh re-prompts, and the modal appears after the final failure.
-  - `docker stop fastssh-sshd` while logged in: the "closed"/"Broken pipe"
-    modal (or a dim exit line) appears and the app does not crash. Then
-    `docker start fastssh-sshd`.
-  - Retry while the old session is still printing output: no output from
-    the old session appears in the new one.
-  - ps shows "ssh tester@127.0.0.1 -p 2222 ..." and NO password in any
-    argv: `ps -eo args | grep -c fastssh-test-pass` must be 0 (the grep
-    itself excluded).
+Acceptance (tags: Section 10). Docker is up. In before(), the spec calls
+resetSandbox('legacy'), empties the sandbox known_hosts and calls
+browser.reloadSession().
+  - [unit] ssh_command quoting table. promptWatcher chunk tables (a split
+    prompt, an ANSI prompt, a sudo prompt after login gets no password,
+    each error kind). Host's Debug output redacts the password.
+    sessionController with a mocked event bus: after Retry, output events
+    from the old sessionId never reach the terminal.
+  - [e2e] Connect item10: the FingerprintModal appears. Click Yes: getText
+    shows "tester@", `whoami` prints tester, and
+    writeCount(tab, password + "\n") is 1. The sandbox known_hosts now has
+    1 line.
+  - [e2e] Connect item10 again: no fingerprint modal appears within 5 s,
+    and the tab logs in.
+  - [e2e] In that tab, run `sudo -k; sudo true`. After 2 s the buffer ends
+    with a password prompt, and writeCount is still 1.
+  - [e2e] `exit` closes the tab. It was the last one, so landing-connect
+    is visible.
+  - [e2e] item2 (account lab-key, key auth) logs in, and no modal appears.
+  - [e2e] Сервер-1 (port 2299): the error modal says "Connection refused".
+    After Retry, exactly ONE modal is shown again. Close removes the tab.
+  - [e2e] my-server (192.0.2.10): the timeout modal appears within 10 s.
+  - [e2e] While item10 is connected, execSync('ps -eo args') has a line
+    with "ssh" and "-p 2222", and no line contains "fastssh-test-pass".
+  - [e2e] Wrong password: the spec adds a copy of item10 with the
+    password "wrong" to hosts.json before reloadSession. Connect it: the
+    password is sent once, the spec types "wrong\n" at the next 2
+    prompts, and the auth error modal appears.
+  - [e2e] While logged in to item10, execSync('docker stop fastssh-sshd'):
+    the "closed" modal or the dim exit line appears, and the app still
+    responds. The after() hook runs `docker start fastssh-sshd`.
+  - [agent] One screenshot of the FingerprintModal.
+  - Milestone: E2E_ALL=1 tools/verify.sh full.
 
 --------------------------------------------------------------------------------
 STAGE 6: TERMINAL TOOLS AND SHORTCUT MATRIX
@@ -2133,21 +2359,31 @@ Notes:
     matrix does not use those. If a key never reaches the webview,
     record it as "intercepted by the desktop" and do not hack around it.
 
-Acceptance:
-  - Every row of the spec's shortcut table is tested (e2e or manually with
-    a screenshot) and listed with its result in the handoff.
-  - In vim inside a local tab, Ctrl+Shift+C copies the selection and does
-    not send ^C. Alt+C does not insert "c" into the shell.
-  - Search for "seq" output with Cyclic off: Next at the last match stays
-    there and shows "No more matches". With Case-insensitive off, "ECHO"
-    does not match "echo".
-  - Alt+Up after `seq 1 500` scrolls so that the command line is at the
-    top.
-  - Output in a background tab shows a dot on the tab and the HostRow.
-    Focusing the tab clears both. 10,000 lines of background output cause
-    exactly one store update for unread (count it in a dev log).
-  - F11 toggles fullscreen. useWindowState does not save the fullscreen
-    size.
+Acceptance (tags: Section 10):
+  - [unit] The isAppShortcut table covers every row of the spec's
+    shortcut table (it matches e.code, handles the Shift variants and
+    ignores e.repeat).
+  - [e2e] tools.e2e.ts runs a table over the rows that have a visible
+    effect: Ctrl+Shift+T/W, Ctrl+Shift+Left/Right, Ctrl+Shift+F, Ctrl+G,
+    Ctrl+Shift+G, Ctrl+Shift+E (toast), Alt+C, Alt+Up and F11. The handoff
+    lists every row with its proof. A key that the desktop intercepts is
+    recorded as "intercepted by the desktop" and not worked around.
+  - [e2e] At a prompt, Ctrl+Shift+C and Alt+C insert nothing into the
+    shell line (the last line of getText is unchanged), and no ^C is sent.
+  - [unit] Search toolbar: with Cyclic off, Next stays on the last match
+    and shows "No more matches". With Case-insensitive off, "ECHO" does
+    not match "echo". [e2e] Run `printf 'a\nb\nc\n'` and search "b": the
+    toolbar shows "1 / 1".
+  - [e2e] Run `printf 'a\nb\nc\n'`, then press Alt+C: readClipboard() is
+    "a\nb\nc".
+  - [e2e] Run `seq 1 500`, then press Alt+Up: viewportY(tab) equals
+    markerLine(tab).
+  - [unit] 10,000 output chunks to a background tab cause exactly one
+    unread store write. [e2e] Output in a background tab shows the dot on
+    the tab and on the HostRow. Focusing the tab clears both.
+  - [unit] useWindowState ignores sizes while fullscreen. [e2e] F11
+    toggles isFullscreen() both ways.
+  - [agent] One screenshot of the search toolbar with a result count.
 
 --------------------------------------------------------------------------------
 STAGE 7: BOOKMARKS, SFTP FILE BROWSER AND LINK OPENING
@@ -2221,27 +2457,31 @@ Note: call open_sftp from the command with tokio::task::spawn_blocking,
 because it can block for up to 10 s. Read XDG_CURRENT_DESKTOP from
 env_sanitize::clean_env().
 
-Acceptance:
-  - Add, search, run and delete bookmarks. They persist after a restart.
-    Adding a duplicate name shows an inline error.
-  - Run with no tab: the button is disabled. Run in an ssh tab (item10):
-    the command runs remotely.
-  - Ctrl+Shift+E on an item10 tab opens the desktop's file manager at
-    sftp://tester@127.0.0.1:2222 (GNOME may first ask for the password
-    "fastssh-test-pass" in a GVFS dialog; the human types it, never the
-    agent). Take a screenshot with `tools/screenshot.sh <file> full`,
-    because the file manager is a separate window. The log line shows
-    which method worked.
-  - Simulate failure: create ~/fastssh-testenv/fakebin/xdg-open (a script
-    that runs `exit 1`) and launch with
-    PATH=~/fastssh-testenv/fakebin:$PATH XDG_CURRENT_DESKTOP=NONE
-    ./tools/dev-sandbox.sh debug. The failure toast shows the URL, and Copy
-    puts it on the clipboard.
-  - Clicking https://example.com printed in a terminal opens the default
-    browser. "file:///etc/passwd" printed in a terminal does NOT open.
-  - The other desktop's path (Dolphin/kioclient if this machine runs
-    GNOME; Nautilus/GVFS if it runs KDE): mark it "check on a real device"
-    in the handoff and in docs/MANUAL_CHECKS.md.
+Acceptance (tags: Section 10):
+  - [unit] sftp URL building (IPv6, encoded user, empty user). open_url
+    rejects file:, javascript: and ssh:. Launcher order with an injected
+    runner: xdg-open fails -> on KDE, kioclient, then dolphin; on other
+    desktops it stops after xdg-open. When every launcher fails, the error
+    contains the URL. [unit] On that error the UI shows the toast with the
+    URL and a Copy button that writes the URL to the clipboard (mocked
+    IPC). This replaces the fake-xdg-open launch.
+  - [e2e] bookmarks.e2e.ts: add, search, run and delete bookmarks. A
+    duplicate name shows the inline error. Run is disabled when no tab is
+    open. "hello" -> `echo bookmark-ok` runs in a Localhost tab. After
+    reloadSession the bookmark is still there.
+  - [e2e] A bookmark `echo remote-$(hostname)` run in an item10 ssh tab
+    prints the container's hostname, not the local one.
+  - [e2e + agent] The last `it` connects item10 and presses Ctrl+Shift+E.
+    After the e2e run, the agent takes one `tools/screenshot.sh <file>
+    full` of the file manager at sftp://tester@127.0.0.1:2222 and quotes
+    the log line that names the method. If GVFS asks for a password, the
+    screenshot of that dialog is the proof. The agent never types the
+    password.
+  - [human] Clicking https://example.com printed in a terminal opens the
+    browser. file:///etc/passwd does not open.
+  - [human] The other desktop's file-manager path (Dolphin/kioclient on
+    GNOME machines, Nautilus/GVFS on KDE machines). Add it to
+    docs/MANUAL_CHECKS.md.
 
 --------------------------------------------------------------------------------
 STAGE 8: PREFERENCES, SESSION RESTORE AND QUIT FLOW
@@ -2302,19 +2542,33 @@ Notes:
   - Re-apply the theme class immediately when the toggle changes. Do not
     wait for the debounced save.
 
-Acceptance:
-  - Each Appearance setting changes the open terminals at once. Take a
-    screenshot before and after the font size change.
-  - Scrollback 1000: after `seq 1 5000`, scrolling up reaches no further
-    than about 4000.
-  - Hosts folder -> an empty sandbox folder -> Copy: the files appear
-    there with mode 0600. Point back -> Load: the library reloads.
-  - Restore on: quit with 3 tabs on 2 hosts, relaunch, and the same tabs
-    open. Restore off: nothing opens. Remove a host from hosts.json by
-    hand before relaunch: the others still restore and there is no crash.
-  - The close button and Ctrl+Q both write openedHosts. Check
-    settings.json after each.
-  - Pressing Ctrl+Q twice quickly: one quit, no error in the log.
+Acceptance (tags: Section 10):
+  - [unit] Each preference control calls updateSettings with the right
+    value. Scrollback "Unlimited" maps to -1 and back. The quit flow
+    order (flush before quit_app). The `quitting` guard ignores a second
+    Ctrl+Q. Restore skips missing hosts and clamps tabCount to 10.
+  - [unit] Rust set_hosts_folder with temp dirs: "copy" writes the three
+    files with mode 0600, and "load" returns that folder's library.
+    [unit] The Load/Copy confirm dialogs, and Cancel reverts the field.
+  - [e2e] Toggling Dark theme changes the <html> class at once.
+  - [e2e] With a Localhost tab open, change the font size, font,
+    background and scrollback: option(tab, ...) changes at once. A host
+    with its own font/color keeps it.
+  - [e2e] Set scrollback to 1000, then run `seq 1 5000`:
+    bufferLength(tab) <= 1000 + the number of rows.
+  - [e2e] Restore on: open 2 tabs on item2 and 1 on item10 (accept the
+    fingerprint), then press Ctrl+Q. The session drops, which is expected.
+    settings.json (node:fs) has openedHosts [{item2, 2}, {item10, 1}].
+    After reloadSession the same 3 tabs open, and openedHosts is [] in
+    settings.json. With Restore off, no tabs open.
+    (Localhost tabs are not restored; see the Notes.)
+  - [e2e] A window close request (getCurrentWindow().close() through
+    browser.execute) also writes openedHosts.
+  - [agent] Kill test (Section 10, step 8): after SIGTERM and after
+    SIGKILL, settings.json is still valid JSON.
+  - [agent] One screenshot of the Preferences modal.
+  - [human] The Browse button for the hosts folder in the native dialog.
+  - Milestone: E2E_ALL=1 tools/verify.sh full.
 
 --------------------------------------------------------------------------------
 STAGE 9: TWO-WAY ~/.ssh/config SYNC
@@ -2400,23 +2654,26 @@ Notes:
   - Include files are not followed for import (recorded limitation). The
     hosts in them keep working through the preserved Include line.
 
-Acceptance:
-  - Enable sync in the sandbox: config.backup equals the original
-    byte-for-byte (cmp). The SSHConfig group has web1, web-alias, db10,
-    db2 and bastion. The toast counts are correct.
-  - Enable it a second time (off, then on): config.backup.<ts> is
-    created and config.backup is unchanged.
-  - Edit db2's port to 2200 and save: config has "Port 2200" in db2's
-    block. `ssh -F <sandbox>/config -G db2 | grep -i '^port'` prints 2200.
-    The preamble, Match, Include and "Host *" lines are still present.
-  - Delete db10: its block is gone from config.
-  - Connect web1 in sync mode: ps shows "ssh -F ... web1". It logs in with
-    the key.
-  - chmod 400 on the sandbox config, then save a host: a toast shows the
-    error, and the hosts.json save still succeeded. Restore 600 after.
-  - A symlinked sandbox config (config -> real_config): after a save,
-    config is still a symlink (`test -L`).
-  - ~/.ssh/config of the owner is untouched (same mtime as in Stage 0A).
+Acceptance (tags: Section 10):
+  - [unit] All the 9.9 Rust tests, including: config.backup equals the
+    original byte-for-byte; a second enable writes config.backup.<ts> and
+    leaves config.backup unchanged; changing db2's port gives "Port 2200",
+    and the preamble, Match, Include and "Host *" lines survive; deleting
+    db10 removes its block; a read-only config makes the export fail while
+    the hosts save still succeeds (a warning is returned); a symlinked
+    config is still a symlink after an export.
+  - [e2e] sshconfig.e2e.ts, after resetSandbox('sshconfig') (it re-runs
+    make_fixtures.sh, which rewrites the sandbox ssh config): enable Sync
+    in Preferences and confirm. The toast counts are right, and the
+    SSHConfig group lists web1, web-alias, db10, db2 and bastion.
+  - [e2e] Change db2's port to 2200 in the editor: execSync(`ssh -F
+    <sandbox>/config -G db2`) prints "port 2200".
+  - [e2e] Connect web1 (sync mode): ps shows "ssh -F" and "web1", and the
+    key login succeeds.
+  - [agent] The info log line at startup shows that paths::ssh_dir() is
+    the sandbox.
+  - The real-files guard in verify.sh passes, which proves that the
+    owner's ~/.ssh/config was not touched.
 
 --------------------------------------------------------------------------------
 STAGE 10: GPG ENCRYPTION AND EASYSSH IMPORT
@@ -2532,23 +2789,29 @@ Notes:
   - Never pass the passphrase in argv or in an environment variable (both
     are visible in /proc).
 
-Acceptance:
-  - Enable encryption ("test-passphrase-1"): the sandbox has
-    hosts.json.gpg, accounts.json.gpg and bookmarks.json.gpg ("-----BEGIN
-    PGP MESSAGE-----"). The *.json files are gone. settings.json is still
-    plain.
-  - While gpg runs: `ps -eo args | grep -c test-passphrase-1` is 0. Run it
-    in a loop during a save.
-  - Restart: the unlock modal appears. A wrong passphrase shows "Wrong
-    passphrase" and the modal stays. The correct one loads the library.
-  - Cancel at unlock -> "Quit FastSSH?" -> the app exits with no file
-    changed.
-  - Disable encryption: the plain files return and the .gpg files are gone.
-  - Copy the fake hosts.json.gpg into a fresh sandbox: the unlock error is
-    readable, and the app offers Quit or "Start empty" (renames the file
-    aside like Stage 1).
-  - Import from EasySSH (sandbox legacy dir): counts 5/1/2. A second
-    import gives 0 added, all skipped. The legacy dir is unchanged (cmp).
+Acceptance (tags: Section 10):
+  - [unit] gpg round trip (temp GNUPGHOME). A wrong passphrase right
+    after a good decrypt gives WrongPassphrase. The fake .gpg gives a
+    clear error. A 5 MB payload round-trips. A passphrase with a newline
+    is rejected. The gpg Command's args and envs never contain the
+    passphrase (inspect get_args()/get_envs()); this replaces the ps loop.
+  - [unit] set_encryption with temp dirs: enable writes the 3 .gpg files
+    ("-----BEGIN PGP MESSAGE-----"), removes the .json files and leaves
+    settings.json plain. Disable reverses it. A failing verify step leaves
+    the files unchanged.
+  - [unit] Legacy import from the sandbox fixture gives 5/1/2 (bad-port
+    gets port 22 and a warning). A second import adds 0. The legacy dir
+    is byte-for-byte unchanged.
+  - [e2e] gpg.e2e.ts: enable encryption in Preferences with
+    "test-passphrase-1", then reloadSession: the unlock modal appears. A
+    wrong passphrase shows "Wrong passphrase" and the modal stays. The
+    right one loads the library.
+  - [unit] Cancel at unlock asks "Quit FastSSH?" and then calls quit_app.
+  - [e2e] After resetSandbox('bad') with the fake hosts.json.gpg: the
+    unlock error is readable, and "Start empty" renames the file aside.
+  - [e2e] The menu item "Import from EasySSH" shows a toast with 5/1/2.
+  - [agent] One screenshot of the unlock modal.
+  - Milestone: E2E_ALL=1 tools/verify.sh full.
 
 --------------------------------------------------------------------------------
 STAGE 11: RECOMMENDED ENHANCEMENTS (OPTIONAL)
@@ -2605,6 +2868,12 @@ STAGE 12: POLISH, TESTS, RELEASE APPIMAGE, README
 --------------------------------------------------------------------------------
 Goal: A reviewed, tested FastSSH 1.0.0 AppImage, built for glibc 2.35
 (22.04), that runs on the build machine, plus user docs.
+
+Stage 12 is the one stage with a full manual pass. The Test Matrix
+limits do not apply here, but rule 13 (time-box) still does. The agent
+can't click inside the AppImage by hand. For the UI steps in 12.10, run
+the smoke and terminal specs with E2E_APP pointing to the AppImage. If
+that doesn't work, those steps are [human] items.
 
 Tasks:
 12.1 Error-handling review: grep for unwrap()/expect() in non-test Rust
@@ -2987,6 +3256,8 @@ unless something changed.>
 - Machine changes (each with "approved by owner" and the exact command):
 
 ## 3. Requirements status
+(Copy the table from the previous handoff and change only the rows that
+this stage touched.)
 | Req | Description | Status (Done/Partial/Not started) | Notes |
 |-----|-------------|-----------------------------------|-------|
 | R1  | Host library CRUD | | |
@@ -3023,27 +3294,24 @@ unless something changed.>
 - <field>: <type> = <default>   (list every AppSettings field)
 - Disk record shape notes (legacy keys):
 
-## 7. Dependencies (resolved versions from package-lock.json / Cargo.lock)
-- npm: <name>@<version>
+## 7. Dependencies added or changed in this stage (resolved versions)
+- npm: <name>@<version>      (write "none" if nothing changed)
 - cargo: <name> <version>
 
 ## 8. Deviations from the plan and why
 - <deviation> - <reason> - <files>
 
 ## 9. Verification
-| Command | Result |
-|---------|--------|
-| npm run lint | |
-| npm run typecheck | |
-| npm test | <N passed> |
-| cargo clippy -D warnings | |
-| cargo test | <N passed> |
-| tauri build --debug --no-bundle | |
-| npm run e2e | <N passed / not run: reason> |
-- Sandbox checks performed (each acceptance bullet -> pass/fail):
-- Screenshots: docs/screenshots/stage_<NN>/<file>.png - <what it shows>
-- Env-sanitize grep result (all Command::new sanitized): yes/no
-- Owner's real files untouched (ls --time-style=full-iso compare): yes/no
+- `tools/verify.sh full <spec>`: paste its OK/FAIL summary lines (with times)
+- Test counts: vitest <N>, cargo test <N>, e2e <N passed / not run: reason>
+- Acceptance (one row per bullet):
+
+| Bullet (short) | Tag | Proof (test name, or command + output) | PASS/FAIL |
+|----------------|-----|----------------------------------------|-----------|
+
+- Screenshots (max 2): docs/screenshots/stage_<NN>/<file>.png - <what it shows>
+- Env-sanitize grep (every Command::new / CommandBuilder::new is sanitized): yes/no
+- Real-files guard (verify.sh): OK/FAIL
 
 ## 10. Known issues / TODOs
 - <issue> - <impact> - <suggested fix>
@@ -3062,68 +3330,111 @@ unless something changed.>
  10. TESTING WORKFLOW (end of every stage from Stage 0B on)
 ================================================================================
 
-1.  Start the test target.
+Tiers (rule 3): a) fast checks while working, b) tools/verify.sh once per
+stage, c) the Acceptance bullets, each proven as its tag says. The steps
+below apply ONLY where the Test Matrix (Section 4) says so.
+
+Acceptance tags (every bullet in Stages 3-10 has one):
+  [unit]  A vitest or cargo test proves it. Name the test in the handoff.
+          No manual run is needed.
+  [e2e]   An assertion in the stage's e2e spec proves it. Name the `it`
+          block in the handoff.
+  [agent] The agent checks it once with shell commands, log greps or one
+          screenshot, and records the command and its output in 1-2
+          lines. The agent NEVER clicks through the UI by hand. Every UI
+          action goes into an e2e spec.
+  [human] Only a person can check it (native dialogs, the other desktop,
+          sound, typing a real password). List it under "Check on a real
+          device" and in docs/MANUAL_CHECKS.md. It never blocks a stage.
+  If a tag's method is impossible here (for example, tauri-driver is
+  missing), fall back to the next one ([e2e] -> [agent] screenshot + log)
+  and say so in the handoff.
+
+1.  Test target (only in stages with Docker = yes).
          docker start fastssh-sshd 2>/dev/null || docker run -d --name fastssh-sshd -p 127.0.0.1:2222:22 fastssh-test-sshd
          docker ps --filter name=fastssh-sshd --format '{{.Status}}'    (must say "Up")
-    Refresh the fixtures without wiping the state (only use --reset when a
-    stage asks for a clean slate):
-         bash tools/make_fixtures.sh
-    Load a fixture set into the sandbox config when a stage needs one:
+    Rebuild the image only if tools/test-sshd/Dockerfile or big.txt
+    changed. Run `bash tools/make_fixtures.sh` only if files in
+    ~/fastssh-testenv are missing. It is cheap and idempotent, and
+    --reset wipes only the sandbox. e2e specs load the fixture set they
+    need themselves (step 6). For a manual run:
          cp ~/fastssh-testenv/legacy/*.json ~/fastssh-testenv/config/
-2.  Build and run while preserving the app data. The sandbox config dir
-    persists between runs. Never delete it between runs of one stage.
-         npm run tauri build -- --debug --no-bundle
+2.  Manual run (only for [agent] bullets that need a running app):
+         tools/build-debug.sh       (skip it if verify.sh just built and no code changed)
          ./tools/dev-sandbox.sh debug > /tmp/fastssh-run.log 2>&1 &
-         sleep 5; pgrep -af 'target/debug/fastssh'     (must show one process)
-    Use `./tools/dev-sandbox.sh dev` for hot-reload work. The final checks
-    of a stage always use the built debug binary.
-3.  Permissions. Linux has no runtime prompts, so test the permission-like
-    flows once per relevant stage, with real OS behaviour:
-         chmod 500 ~/fastssh-testenv/config     (saving must show an error toast)
-         chmod 700 ~/fastssh-testenv/config     (restore)
-    The Tauri capability system is the other "permission" layer. After
-    each run, check the log for "not allowed":
-         grep -i 'not allowed' ~/.local/share/io.github.fastssh.app/logs/*.log
-4.  Launch checks: one window titled FastSSH, no errors in the log.
-         grep -iE 'error|panic' /tmp/fastssh-run.log | head
-5.  Screenshots go into docs/screenshots/stage_<NN>/. LOOK at each one
-    with the image-reading tool, and describe in the handoff what you see.
-         mkdir -p docs/screenshots/stage_NN
-         tools/screenshot.sh docs/screenshots/stage_NN/<name>.png window   (active window)
-         tools/screenshot.sh docs/screenshots/stage_NN/<name>.png full     (whole screen, e.g. file manager)
-    In e2e: `await browser.saveScreenshot('docs/screenshots/stage_NN/x.png')`
-    (webview only; works on every desktop). Window mode captures the active
-    window, so bring FastSSH to the front first (click it in e2e, or wait
-    1 s after launch). If screenshot.sh exits 2, use the e2e screenshot.
-6.  Drive the UI with WebdriverIO specs (npm run e2e). Find elements by
-    data-testid with $('[data-testid="landing-connect"]'). Use keys:
-         await browser.keys(['Control', 'Shift', 't'])
-    For a double-click: (await $(sel)).doubleClick(). For right-click:
-    .click({ button: 'right' }). Never click by pixel coordinates. If
-    e2e can't run, do the step by hand in the sandbox and record "manual"
-    plus a screenshot for each acceptance bullet.
-7.  Window states (this desktop's equivalent of rotation): minimum size,
-    maximized, fullscreen (F11) and back. Screenshot each, and check that
-    nothing is clipped and the terminal refits (tput cols).
-8.  Persistence test via force-stop and relaunch:
+         sleep 4; pgrep -af 'target/debug/fastssh'     (must show one process)
+    Stop it with `pkill -TERM -f target/debug/fastssh` when you are done.
+    Use `./tools/dev-sandbox.sh dev` (hot reload) only to iterate on UI,
+    never for acceptance.
+3.  Permission error path (Perm column). Prefer unit tests: Rust writes
+    into a temp dir with mode 0500 and expects an AppError naming the
+    path, and vitest makes save_* reject and expects the error toast and
+    the revert. Only Stages 1 and 12 also test it live:
+         chmod 500 ~/fastssh-testenv/config    (saving must show an error toast)
+         chmod 700 ~/fastssh-testenv/config    (restore)
+    verify.sh's smoke step and e2e catch capability errors ("not
+    allowed"). Grep for them yourself only when an action silently does
+    nothing:
+         grep -i 'not allowed' /tmp/fastssh-run.log ~/.local/share/io.github.fastssh.app/logs/*.log
+4.  Launch check: verify.sh does it automatically. It runs the app in the
+    sandbox for 8 s and fails on "panicked", "not allowed", "symbol
+    lookup" or an early exit.
+5.  Screenshots (budget: rule 12). Take them only of new visible UI that
+    tests can't assert (layout, colors, a native window).
+         tools/screenshot.sh docs/screenshots/stage_NN/<name>.png window
+         tools/screenshot.sh docs/screenshots/stage_NN/<name>.png full    (other windows, e.g. a file manager)
+    In e2e: await browser.saveScreenshot('docs/screenshots/stage_NN/x.png')
+    (webview only; works on every desktop). If screenshot.sh exits with
+    code 2, use the e2e one.
+6.  E2E (WebdriverIO). These rules keep it fast and reliable:
+      - One spec file per stage. While you develop it, run only that spec:
+            tools/build-debug.sh && npx wdio run e2e/wdio.conf.ts --spec e2e/specs/<name>.e2e.ts
+        Rebuild only when app code changed. Edits to the spec alone need
+        no rebuild.
+      - Each spec's before() calls resetSandbox('<set>') from
+        e2e/helpers.ts and then browser.reloadSession(), so the app
+        restarts on known data. resetSandbox empties
+        ~/fastssh-testenv/config and copies in one fixture set: empty,
+        legacy, big, bad, or sshconfig (re-runs make_fixtures.sh). Specs
+        never depend on each other.
+      - Wait with $(sel).waitForExist({ timeout: 5000 }) or
+        browser.waitUntil(..., { timeout: 10000 }). Never use
+        browser.pause() for longer than 500 ms. The mocha timeout is 30 s,
+        and bail is on.
+      - Find elements by data-testid: $('[data-testid="landing-connect"]').
+        Keys: await browser.keys(['Control', 'Shift', 't']). Double-click:
+        (await $(sel)).doubleClick(). Right-click: .click({ button:
+        'right' }). Never click by pixel coordinates.
+      - Read terminal state through window.__fastsshTest (Stage 4 notes)
+        instead of taking screenshots.
+      - Read files with node:fs inside the spec (e.g. the sandbox
+        hosts.json). Run shell checks with child_process.execSync (e.g.
+        `ps -eo args`, `docker stop`). This turns most former manual checks
+        into [e2e].
+      - Restart the app inside a spec with browser.reloadSession(), for
+        persistence and restore checks.
+7.  Window states (Win column): in e2e, browser.setWindowSize(800, 500).
+    Maximize and fullscreen through the window API with browser.execute.
+    Assert that nothing overflows (scrollWidth <= clientWidth on the
+    header, sidebar and tab bar) and that the terminal's cols changed.
+    Take screenshots of this only in Stage 12.
+8.  Persistence (Kill column):
          pkill -TERM -f 'target/debug/fastssh'   (graceful: close handlers run)
          pkill -KILL -f 'target/debug/fastssh'   (crash: data must still be valid JSON)
          python3 -I -m json.tool ~/fastssh-testenv/config/settings.json > /dev/null && echo VALID
     Relaunch and confirm that the stage's persisted state is back.
-9.  Logs on a crash or a misbehaviour:
-         tail -n 200 ~/.local/share/io.github.fastssh.app/logs/*.log | grep -vE 'DEBUG'
-         grep -nE 'panicked|ERROR|not allowed|symbol lookup' /tmp/fastssh-run.log
-    For WebKit or rendering issues, rerun with WEBKIT_DEBUG=all and check
-    stderr.
-    Check child processes: `ps -o pid,args --ppid $(pgrep -f target/debug/fastssh)`.
-10. Fallback input paths. The GTK/KDE file dialog (identity file, hosts
-    folder) can't be driven by WebDriver. Type the path into the text
-    field in tests. Open the real dialog once per stage that uses it, and
-    take a screenshot proving that it opened. List "pick a file in the
-    real dialog" under "Check on a real device" for the human.
+9.  Debugging (only when something fails):
+         grep -nE 'panicked|ERROR|not allowed|symbol lookup' /tmp/fastssh-run.log /tmp/fastssh-verify.log
+         tail -n 200 ~/.local/share/io.github.fastssh.app/logs/*.log | grep -v DEBUG
+    For WebKit or rendering issues, rerun with WEBKIT_DEBUG=all. To see the
+    child processes: ps -o pid,args --ppid $(pgrep -f target/debug/fastssh)
+10. Native file dialogs can't be driven by WebDriver. Tests type the path
+    into the text field. Opening the real dialog and picking a file is a
+    [human] item. Do not spend agent time on it.
 
-Cannot be proven on a single machine (mark "check on a real device" in the
-handoff and collect them in docs/MANUAL_CHECKS.md):
+[human] items that cannot be proven on a single machine (list them under
+"Check on a real device" in the handoff and collect them in
+docs/MANUAL_CHECKS.md):
   - The desktop this machine does NOT run: on GNOME, the Dolphin/KIO sftp
     path, the KWallet prompt and KWin rendering; on KDE, the Nautilus/GVFS
     sftp path, the GNOME Keyring prompt and Mutter rendering.
@@ -3143,20 +3454,35 @@ handoff and collect them in docs/MANUAL_CHECKS.md):
  11. SESSION PROMPTS (for the human to paste)
 ================================================================================
 
-Before pasting, replace <PLAN_DIR> with the absolute path of the folder that
-holds this plan and the spec (for example /home/<you>/projects/fastssh-plan),
-replace <NN> with stage numbers, and fill in the Machine line.
+Before pasting, replace <NN> with stage numbers and fill in the Machine
+line. The project path below is ~/src/fastssh; change
+it if yours is different.
+NEVER put a password or any other secret into a prompt or into this plan.
+The plan is copied into the git repository (docs/BUILD_PLAN.txt).
+
+Applying revision 2 to the build in progress (use ONCE, now):
+```text
+Continue FastSSH in ~/src/fastssh. The build plan was
+revised to make testing faster. The new plan. Read its "REVISION 2" note, rules 3 and
+12-14, the Section 4 Test Matrix and Section 10.
+Then do Stage 3 task 3.0 and commit it as "Plan revision 2: faster test
+workflow". Then continue Stage 3 from where the code is now. Do not redo
+finished tasks. Prove the Stage 3 Acceptance bullets by their tags, run
+`tools/verify.sh full library` once at the end, write
+docs/handoff/HANDOFF_STAGE_03.md and commit "Stage 03: Connection and
+account editors".
+Ask me before any sudo, install, upgrade or deletion outside the sandbox.
+```
 
 First session:
 ```text
-You are building FastSSH. The plan is at
-~/src/fastssh/docs/FASTSSH_BUILD_PLAN.txt and the spec at
-~/src/fastssh/docs/fastssh_tauri_v2_agent_specification.md.
-Read the whole plan first. ~/src/fastssh/docs in the plan means that folder.
+You are building FastSSH. The plan is FASTSSH_BUILD_PLAN.txt and the spec is
+fastssh_tauri_v2_agent_specification.md, both in ~/src
+(this is <PLAN_DIR> in the plan). Read the whole plan first.
 Machine: <e.g. Ubuntu 24.04, GNOME, Wayland, x86_64>. Detect and record the
-full profile yourself in Stage 0A; do not assume any tool is installed. This
-machine is also the test target; SSH test servers run in a local container
-on 127.0.0.1.
+full profile yourself in Stage 0A. Do not assume any tool is installed.
+This machine is also the test target. SSH test servers run in a local
+container on 127.0.0.1.
 Execute STAGE 0 only: 0A (environment audit + sandbox fixtures), then 0B
 (project setup). Ask me before ANY sudo, apt, rustup, cargo install, docker
 pull or toolchain upgrade: show the command and why, then wait for my yes.
@@ -3168,26 +3494,32 @@ docs/handoff/HANDOFF_STAGE_00.md and the "Stage 00" git commit.
 Every later session:
 ```text
 Continue building FastSSH in ~/src/fastssh.
-1. Read docs/BUILD_PLAN.txt, then the newest file in docs/handoff/.
-2. Run the session-start checks (plan rule 8). Start the test target
-   (Section 10 step 1) and confirm the current code builds and all tests
-   pass BEFORE changing anything; report any failure first.
-3. Execute STAGE <NN+1> only, following its tasks and reference code.
-4. Test it per Section 10 and every Acceptance bullet; look at your
-   screenshots.
+1. Read docs/BUILD_PLAN.txt (the rules, the Section 4 Test Matrix, your
+   stage and Section 10), then the newest file in docs/handoff/.
+2. Run only the session-start checks (plan rule 8), plus `git status` and
+   `git log -1`. If the last handoff says Complete and the tree is clean,
+   do NOT rebuild or re-run the tests. Start the test container only if
+   the Test Matrix says Docker = yes for this stage.
+3. Execute STAGE <NN+1> only. While working, run only the fast checks for
+   what you touched (rule 3a).
+4. When all tasks are done, run `tools/verify.sh full <spec>` once (with
+   E2E_ALL=1 at milestone stages). Then prove each Acceptance bullet as its
+   tag says. Time-box checks that stay stuck (rule 13).
 5. Write docs/handoff/HANDOFF_STAGE_<NN+1>.md and commit
    "Stage <NN+1>: <title>".
-#Ask before any sudo, install, upgrade or deletion outside the sandbox.
+#Ask me before any sudo, install, upgrade or deletion outside the sandbox:
+show the exact command and why, then wait for my yes.
 ```
 
 Partial or failed stage:
 ```text
 Continue FastSSH in ~/src/fastssh.
 Stage <NN> is "Partially complete". Read docs/BUILD_PLAN.txt and
-docs/handoff/HANDOFF_STAGE_<NN>.md. Finish ONLY the items under "Known
-issues / TODOs" and any failed Acceptance bullets of Stage <NN>. Do not start
-the next stage. Re-run all verification commands, update the SAME handoff
-file (set Status to Complete if everything passes), and commit
+docs/handoff/HANDOFF_STAGE_<NN>.md. Fix ONLY the items under "Known
+issues / TODOs" and the FAIL rows of Stage <NN>'s acceptance table. Do not
+start the next stage. While fixing, re-run only the failing checks. At the
+end, run `tools/verify.sh full <stage spec>` once, update the SAME handoff
+(set Status to Complete if everything passes) and commit
 "Stage <NN>: <title> (completed)".
 ```
 

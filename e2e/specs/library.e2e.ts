@@ -287,7 +287,8 @@ describe("connection + account editors (Stage 3)", () => {
     await tap({ id: "tunnel-add" }, { id: "tunnel-row-0" });
     await selectInPage("tunnel-type-0", "remote");
     await tapButton("editor-save");
-    expect(await (await byTestId("landing-name")).getText()).toBe("web-1");
+    // The duplicate name is a label, not a key (plan 4.1): a second web-1 row.
+    expect((await $$('//div[@data-testid="host-row" and @data-name="web-1"]')).length).toBe(2);
     await shot("stage_03", "editor-tunnel-invalid.png");
 
     await tapGone("editor-cancel", "connection-editor");

@@ -40,3 +40,10 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+# Faster debug builds and links (plan 3.0 d).
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
