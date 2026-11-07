@@ -69,12 +69,45 @@ describe("librarySlice", () => {
     expect(document.documentElement.classList.contains("dark")).toBe(true);
   });
 
-  it("setHosts updates state and saves once (not debounced)", async () => {
-    await useAppStore.getState().setHosts([{ id: "a", name: "a" } as never, { id: "b", name: "b" } as never]);
+  it("saveHosts updates state and saves once (not debounced)", async () => {
+    await useAppStore.getState().saveHosts([{ id: "a", name: "a" } as never, { id: "b", name: "b" } as never]);
     expect(useAppStore.getState().hosts).toHaveLength(2);
     const calls = callsTo(backend, "save_hosts");
     expect(calls).toHaveLength(1);
     expect(calls[0]?.args.hosts).toHaveLength(2);
+  });
+
+  it("an OS error rolls the list back and raises an error toast (task 3.12)", async () => {
+    const a = { id: "a", name: "a" } as never;
+    const b = { id: "b", name: "b" } as never;
+    await useAppStore.getState().saveHosts([a]);
+
+    backend.failNext("save_hosts", "hosts.json: Read-only file system (os error 30)");
+    const inflight = useAppStore.getState().saveHosts([a, b]);
+    expect(useAppStore.getState().hosts).toHaveLength(2); // optimistic
+    await inflight;
+    expect(useAppStore.getState().hosts).toHaveLength(1); // rolled back
+    const toast = useAppStore.getState().toasts[0];
+    expect(toast?.kind).toBe("error");
+    expect(toast?.message).toContain("Read-only file system");
+  });
+
+  it("only the latest save may restore its snapshot (save token)", async () => {
+    const a = { id: "a", name: "a" } as never;
+    const b = { id: "b", name: "b" } as never;
+    backend.failNext("save_hosts", "first write fails");
+    const first = useAppStore.getState().saveHosts([a]);
+    const second = useAppStore.getState().saveHosts([a, b]);
+    await Promise.all([first, second]);
+    expect(callsTo(backend, "save_hosts")).toHaveLength(2);
+    expect(useAppStore.getState().hosts).toHaveLength(2);
+  });
+
+  it("saveAccounts / saveBookmarks write their own files", async () => {
+    await useAppStore.getState().saveAccounts([{ id: "a1", name: "lab" } as never]);
+    await useAppStore.getState().saveBookmarks([{ id: "b1", name: "ls", command: "ls" } as never]);
+    expect(callsTo(backend, "save_accounts")[0]?.args.accounts).toHaveLength(1);
+    expect(callsTo(backend, "save_bookmarks")[0]?.args.bookmarks).toHaveLength(1);
   });
 
   it("dismissWarnings clears the banner state", () => {

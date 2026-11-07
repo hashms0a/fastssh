@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Host } from "../../types/models";
 import { LOCALHOST_ID } from "../../types/models";
 import { strings } from "../../lib/strings";
+import { duplicateHostAction, editHost, removeHost } from "../../lib/editorActions";
 import { useAppStore } from "../../store/useAppStore";
 import { ContextMenu } from "../ContextMenu";
 
@@ -20,18 +21,16 @@ interface Props {
  */
 export function HostRow({ host, selected, onConnect }: Props) {
   const selectHost = useAppStore((s) => s.selectHost);
-  const pushToast = useAppStore((s) => s.pushToast);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const soon = () => pushToast(strings.comingSoon);
   const isLocal = host.id === LOCALHOST_ID;
 
   const items = isLocal
     ? [{ label: strings.connect, run: () => onConnect(host) }]
     : [
         { label: strings.connect, run: () => onConnect(host) },
-        { label: strings.edit, run: soon },
-        { label: strings.duplicate, run: soon },
-        { label: strings.remove, run: soon },
+        { label: strings.edit, run: () => editHost(host) },
+        { label: strings.duplicate, run: () => duplicateHostAction(host) },
+        { label: strings.remove, run: () => void removeHost(host) },
       ];
 
   return (

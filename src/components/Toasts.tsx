@@ -15,7 +15,10 @@ export function Toasts() {
   if (toasts.length === 0 && warnings.length === 0) return null;
 
   return (
-    <div data-testid="toasts" className="fixed bottom-4 right-4 z-40 flex max-w-md flex-col items-end gap-2">
+    <div
+      data-testid="toasts"
+      className="pointer-events-none fixed bottom-4 right-4 z-50 flex max-w-md flex-col items-end gap-2"
+    >
       {warnings.map((w) => (
         <div
           key={`w:${w}`}

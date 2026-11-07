@@ -3,6 +3,7 @@ import { Bookmark, EllipsisVertical, Plus, TerminalSquare } from "lucide-react";
 import { strings } from "../lib/strings";
 import { ipc } from "../lib/ipc";
 import { logError } from "../lib/log";
+import { addHost } from "../lib/editorActions";
 import { useAppStore } from "../store/useAppStore";
 import { LOCALHOST_ID } from "../types/models";
 import { ContextMenu } from "./ContextMenu";
@@ -29,9 +30,9 @@ export function HeaderBar() {
       <button
         type="button"
         data-testid="new-connection"
-        title={strings.comingSoon}
-        disabled
+        title={strings.newConnection}
         className="flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1.5 text-sm hover:bg-[var(--accent)] hover:text-white disabled:opacity-60"
+        onClick={addHost}
       >
         <Plus size={15} aria-hidden />
         {strings.newConnection}

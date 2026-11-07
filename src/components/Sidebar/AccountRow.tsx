@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Account } from "../../types/models";
 import { strings } from "../../lib/strings";
+import { duplicateAccountAction, editAccount, removeAccountAction } from "../../lib/editorActions";
 import { useAppStore } from "../../store/useAppStore";
 import { ContextMenu } from "../ContextMenu";
 
@@ -9,12 +10,10 @@ interface Props {
   selected: boolean;
 }
 
-/** One shared-account row (R2). Edit/Duplicate/Remove wire up in Stage 3. */
+/** One shared-account row (R2). Edit/Duplicate/Remove open the editors. */
 export function AccountRow({ account, selected }: Props) {
   const selectAccount = useAppStore((s) => s.selectAccount);
-  const pushToast = useAppStore((s) => s.pushToast);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const soon = () => pushToast(strings.comingSoon);
 
   return (
     <div
@@ -44,9 +43,9 @@ export function AccountRow({ account, selected }: Props) {
           y={menu.y}
           onClose={() => setMenu(null)}
           items={[
-            { label: strings.edit, run: soon },
-            { label: strings.duplicate, run: soon },
-            { label: strings.remove, run: soon },
+            { label: strings.edit, run: () => editAccount(account) },
+            { label: strings.duplicate, run: () => duplicateAccountAction(account) },
+            { label: strings.remove, run: () => void removeAccountAction(account) },
           ]}
         />
       )}

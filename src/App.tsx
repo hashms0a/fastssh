@@ -9,6 +9,8 @@ import { HeaderBar } from "./components/HeaderBar";
 import { SourceListView } from "./components/Sidebar/SourceListView";
 import { Splitter } from "./components/Splitter";
 import { WorkspaceEmptyState } from "./components/Workspace/WorkspaceEmptyState";
+import { EditorOverlay } from "./components/Editors/EditorOverlay";
+import { ModalHost } from "./components/Modals/ModalHost";
 import { Toasts } from "./components/Toasts";
 
 export default function App() {
@@ -25,7 +27,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex h-screen flex-col bg-[var(--bg)] text-[var(--fg)]">
+    <div className="relative flex h-screen flex-col bg-[var(--bg)] text-[var(--fg)]">
       <HeaderBar />
       <div className="flex min-h-0 flex-1">
         <aside
@@ -36,10 +38,12 @@ export default function App() {
           <SourceListView />
         </aside>
         <Splitter />
-        <main className="flex min-w-0 flex-1 flex-col">
+        <main className="relative flex min-w-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             <WorkspaceEmptyState />
           </div>
+          {/* Editors float over the workspace; notebooks stay mounted. */}
+          <EditorOverlay />
           <p
             data-testid="runtime-info"
             className="border-t border-[var(--border)] px-3 py-1 text-xs text-[var(--muted)]"
@@ -50,6 +54,7 @@ export default function App() {
           </p>
         </main>
       </div>
+      <ModalHost />
       <Toasts />
     </div>
   );

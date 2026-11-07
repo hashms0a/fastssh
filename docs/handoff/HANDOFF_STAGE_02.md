@@ -37,15 +37,15 @@ FASTSSH_LEGACY_DIR=~/fastssh-testenv/legacy HOME=~/fastssh-testenv
 
 ## 3. Requirements status
 
-| Req | Description                          | Status          | Notes                                                     |
-| --- | ------------------------------------ | --------------- | --------------------------------------------------------- |
-| R1  | Shell layout (header/sidebar/main)   | Done            |                                                           |
-| R2  | Groups, natural sort, collapse       | Done            | naturalSort.ts (case-insensitive, numeric chunks).        |
-| R5  | Filter (name + user@host)            | Done            | 2000 hosts: 7 keystrokes ~400 ms total, no lag.           |
-| R6  | Accounts tab (key + source name)     | Done            | Editing UI is Stage 3.                                    |
-| R19 | Window/session state                 | Done (a-c)      | panelSize + collapsedGroups persist; restoreHosts Stage 8.|
-| R22 | Settings (theme, splitter, groups)   | Done            |                                                           |
-| R3,R7-R18,R20-R21 | -                      | Not started     | Carry-over as per plan.                                   |
+| Req               | Description                        | Status      | Notes                                                      |
+| ----------------- | ---------------------------------- | ----------- | ---------------------------------------------------------- |
+| R1                | Shell layout (header/sidebar/main) | Done        |                                                            |
+| R2                | Groups, natural sort, collapse     | Done        | naturalSort.ts (case-insensitive, numeric chunks).         |
+| R5                | Filter (name + user@host)          | Done        | 2000 hosts: 7 keystrokes ~400 ms total, no lag.            |
+| R6                | Accounts tab (key + source name)   | Done        | Editing UI is Stage 3.                                     |
+| R19               | Window/session state               | Done (a-c)  | panelSize + collapsedGroups persist; restoreHosts Stage 8. |
+| R22               | Settings (theme, splitter, groups) | Done        |                                                            |
+| R3,R7-R18,R20-R21 | -                                  | Not started | Carry-over as per plan.                                    |
 
 ## 4. Files created / modified
 
@@ -172,4 +172,5 @@ No new deps. Same matrix as HANDOFF_STAGE_01 §7 (Tauri 2.x, WebdriverIO
 - Editor UX: modal dialog (plan §Stage 3 wording "editor panel") vs
   right-side drawer inside the workspace - Stage 3 starts with the
   modal; say the word if you want a drawer.
+  Modal Dialog (The Default).
 - Nothing else - Stage 2 is decision-free.

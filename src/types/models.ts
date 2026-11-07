@@ -19,6 +19,17 @@ export interface Host {
   local?: boolean;
 }
 
+export type TunnelType = "local" | "remote";
+
+/** One parsed entry of Host.tunnels ("-L 8080:localhost:80"). */
+export interface TunnelRule {
+  id: string;
+  type: TunnelType;
+  sourcePort: number;
+  destinationHost: string;
+  destinationPort: number;
+}
+
 export interface Account {
   id: string;
   name: string;

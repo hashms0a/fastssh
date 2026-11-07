@@ -82,6 +82,15 @@ describe("app shell (Stage 2)", () => {
     expect(await rowNames()).toEqual(["Localhost", "bad-port", "item2", "item10", "my-server", "Сервер-1"]);
     // Group counts: Lab has 2 hosts. (getText is flaky on WebKitWebDriver; HTML works.)
     expect(await (await byTestId("group-count-Lab")).getHTML()).toContain(">2<");
+    // Sub-line: an account host shows its ssh user@host, Localhost its kind.
+    // An account host shows "<account user>@<host>:<port>" (the fixture account
+    // owns item2, so the user depends on which spec ran last).
+    expect(await (await $('//div[@data-testid="host-row" and @data-name="item2"]')).getHTML()).toContain(
+      "@127.0.0.1:2222",
+    );
+    expect(await (await $('//div[@data-testid="host-row" and @data-name="Localhost"]')).getHTML()).toContain(
+      "local shell",
+    );
   });
 
   it("the filter narrows to Lab and restoring brings every group back", async () => {

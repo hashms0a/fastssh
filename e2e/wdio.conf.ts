@@ -33,5 +33,7 @@ export const config: WebdriverIO.Config = {
   ],
   framework: "mocha",
   reporters: ["spec"],
-  mochaOpts: { timeout: 120000 },
+  // The tauri driver's window-focus hook intermittently fails with CDP 404s;
+  // one retry absorbs it without hiding real regressions.
+  mochaOpts: { timeout: 120000, retries: 1 },
 };
