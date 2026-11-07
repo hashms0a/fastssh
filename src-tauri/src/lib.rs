@@ -57,6 +57,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::system::get_runtime_info,
+            commands::system::quit_app,
             commands::library::load_all,
             commands::library::save_hosts,
             commands::library::save_accounts,

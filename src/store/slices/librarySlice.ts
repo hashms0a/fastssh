@@ -1,5 +1,6 @@
 import type { StateCreator } from "zustand";
 import type { Account, Bookmark, Host } from "../../types/models";
+import { LOCALHOST_HOST } from "../../types/models";
 import type { LoadReport } from "../../lib/ipc";
 import { ipc } from "../../lib/ipc";
 import { logError } from "../../lib/log";
@@ -32,8 +33,10 @@ export const createLibrarySlice: StateCreator<AppStore, [], [], LibrarySlice> = 
   legacyAvailable: false,
   hydrate: (report) => {
     document.documentElement.classList.toggle("dark", report.settings.useDarkTheme);
+    // R8: the in-memory Localhost lives at the front of the library.
+    const hosts = [LOCALHOST_HOST, ...report.hosts];
     set({
-      hosts: report.hosts,
+      hosts,
       accounts: report.accounts,
       bookmarks: report.bookmarks,
       warnings: report.warnings,
@@ -56,3 +59,10 @@ export const createLibrarySlice: StateCreator<AppStore, [], [], LibrarySlice> = 
   },
   dismissWarnings: () => set({ warnings: [] }),
 });
+
+/** Toggle a group's collapsed state in settings.collapsedGroups. */
+export function toggleGroupCollapsed(s: AppStore, group: string): void {
+  const cur = s.settings.collapsedGroups;
+  const next = cur.includes(group) ? cur.filter((g) => g !== group) : [...cur, group];
+  s.updateSettings({ collapsedGroups: next });
+}

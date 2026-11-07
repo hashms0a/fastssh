@@ -43,6 +43,7 @@ export const ipc = {
   },
 
   loadAll: (): Promise<LoadReport> => invoke<LoadReport>("load_all"),
+  quit: () => invoke<void>("quit_app"),
   saveHosts: (hosts: Host[]) => invoke<void>("save_hosts", { hosts }),
   saveAccounts: (accounts: Account[]) => invoke<void>("save_accounts", { accounts }),
   saveBookmarks: (bookmarks: Bookmark[]) => invoke<void>("save_bookmarks", { bookmarks }),

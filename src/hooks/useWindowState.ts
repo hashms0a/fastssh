@@ -10,9 +10,12 @@ import { useAppStore } from "../store/useAppStore";
  * restore size must not be overwritten by the screen size, so only the
  * maximized flag updates then; while fullscreen nothing updates (R19a).
  *
- * XWayland quirk: a plain set_window_rect resize often does not produce a
+ * XWayland quirks: a plain set_window_rect resize often produces no
  * window resize event, so a 700 ms poll of innerSize() is the safety net
- * and the events are the fast path.
+ * and the events are the fast path; the boot resize storm (window is
+ * sized after show) is absorbed by seeding `last` once at mount, so the
+ * first real change is always saved (the 500 ms debounce coalesces the
+ * intermediate sizes of one gesture).
  */
 export function useWindowState(): void {
   const updateSettings = useAppStore((s) => s.updateSettings);
@@ -21,9 +24,7 @@ export function useWindowState(): void {
     const win = getCurrentWindow();
     let disposed = false;
     const unlisten: Array<() => void> = [];
-    // Rust sized the window from settings before this mounted; skip the
-    // resize storm of the first second so the saved size stays stable.
-    const bootAt = Date.now();
+    let seeded = false;
     let last = { w: 0, h: 0, max: false };
 
     const save = debounce(() => {
@@ -33,9 +34,15 @@ export function useWindowState(): void {
         const size = await win.innerSize();
         const w = Math.round(size.width / scale);
         const h = Math.round(size.height / scale);
+        if (!seeded) {
+          // Rust sized the window from settings; adopt it as the baseline
+          // without saving, so the boot storm does not drift the size.
+          seeded = true;
+          last = { w, h, max: maximized };
+          return;
+        }
         if (maximized === last.max && (maximized || (w === last.w && h === last.h))) return;
         last = { w, h, max: maximized };
-        if (Date.now() - bootAt < 1000) return; // startup resize storm
         if (await win.isFullscreen()) return; // keep the restore size
         updateSettings(
           maximized ? { windowMaximized: true } : { windowMaximized: false, windowWidth: w, windowHeight: h },

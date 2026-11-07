@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_SETTINGS, type Host } from "../../types/models";
+import { DEFAULT_SETTINGS, LOCALHOST_ID, type Host } from "../../types/models";
 import { useAppStore } from "../useAppStore";
 import { callsTo, installIpcMock, emptyReport, type MockBackend } from "../../test/ipcMock";
 
@@ -59,7 +59,9 @@ describe("librarySlice", () => {
     });
     useAppStore.getState().hydrate(report);
     const s = useAppStore.getState();
-    expect(s.hosts).toHaveLength(1);
+    // Localhost is injected at the front (Stage 2), so 1 saved host = 2.
+    expect(s.hosts).toHaveLength(2);
+    expect(s.hosts[0]?.id).toBe(LOCALHOST_ID);
     expect(s.warnings).toEqual(["hosts.json: broken"]);
     expect(s.settings.useDarkTheme).toBe(false);
     expect(document.documentElement.classList.contains("dark")).toBe(false);

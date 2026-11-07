@@ -82,3 +82,23 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 /** The built-in in-memory host of the local shell (R8). */
 export const LOCALHOST_ID = "local-localhost";
+
+/** Injected at the front of the library after load; never saved to disk
+ *  (Rust save_hosts drops local === true). */
+export const LOCALHOST_HOST: Host = {
+  id: LOCALHOST_ID,
+  name: "Localhost",
+  group: "Local",
+  host: "",
+  port: 22,
+  username: "",
+  password: "",
+  identity_file: "",
+  account: "",
+  color: "",
+  font: "",
+  tunnels: "",
+  extra_arguments: "",
+  ssh_config: "",
+  local: true,
+};

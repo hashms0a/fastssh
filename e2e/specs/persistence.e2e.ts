@@ -15,7 +15,6 @@ import { configDir, shot } from "../helpers";
 const settingsFile = path.join(configDir, "settings.json");
 const tmpDir = path.join(__dirname, "..", ".tmp");
 const prevFile = path.join(tmpDir, "prev-settings.json");
-const cssFile = path.join(tmpDir, "prev-css.json");
 
 type Saved = { windowWidth: number; windowHeight: number; windowMaximized: boolean };
 type Css = { w: number; h: number };
@@ -63,15 +62,38 @@ describe("window state persistence (Stage 1)", () => {
       await browser.pause(1500);
     }
     const before = readSettings();
-    // Cycle through sizes so the target always differs from what the last
-    // run persisted (inner = target + XWayland shadow, 50-105 px).
-    const sizes: Array<[number, number]> = [
-      [1150, 660],
-      [1234, 708],
-      [1318, 756],
-    ];
-    const [tw, th] = sizes.find(([w]) => Math.abs(w - before.windowWidth) > 60) ?? sizes[0]!;
-    await browser.setWindowSize(tw, th);
+    // Two widely-spaced sizes (~600 px apart): the saved size is always
+    // the CSS width (target + XWayland CSD shadow, 50-105 px), so targets
+    // 600 px apart can never collide with what the last run persisted.
+    // (Mutter's per-app geometry history can make the boot CSS differ
+    // from settings.json, hence picking from the CURRENT CSS width.)
+    // Mutter's XWayland geometry history restores last run's size at
+    // boot, so pick a target ~300 px away from the CURRENT CSS width.
+    const cur = await innerSizeReady();
+    const tw = cur.w > 1330 ? 1200 : 1500;
+    const th = Math.round(tw * 0.57);
+    // Mutter's XWayland geometry history swallows single resize requests
+    // at random; step through an intermediate size and retry until the
+    // webview lays out at the target (each step is ~175 px, the range
+    // where mutter reliably honours the configure request).
+    const setCss = async (w: number, h: number) => {
+      const deadline0 = Date.now() + 15000;
+      let cur2 = await innerSize();
+      while (Date.now() < deadline0) {
+        if (Math.abs(cur2.w - w) <= 2 && Math.abs(cur2.h - h) <= 2) return;
+        const step = Math.max(-220, Math.min(220, w - cur2.w, (h - cur2.h) * 1.75));
+        await browser.setWindowSize(Math.round(cur2.w + step), Math.round((cur2.w + step) * 0.57));
+        await browser.pause(800);
+        cur2 = await innerSize();
+      }
+      throw new Error(`resize to ${w}x${h} never landed (css=${JSON.stringify(cur2)})`);
+    };
+    await setCss(tw, th);
+    // Kick one more configure at the target: if a mid-sequence resize
+    // arrived while the window was still restoring from fullscreen, the
+    // debounced applier skipped it and settings would keep the boot size.
+    await browser.setWindowSize(tw + 1, th + 1);
+    await browser.pause(1200);
     // 500 ms window + 400 ms settings debounce + I/O: poll for the write.
     const deadline = Date.now() + 6000;
     let s = readSettings();
@@ -79,7 +101,12 @@ describe("window state persistence (Stage 1)", () => {
       await browser.pause(300);
       s = readSettings();
     }
-    expect(Math.abs(s.windowWidth - before.windowWidth)).toBeGreaterThan(2);
+
+    if (Math.abs(s.windowWidth - before.windowWidth) <= 2) {
+      throw new Error(
+        `no settings save: before=${before.windowWidth} now=${s.windowWidth} css=${JSON.stringify(await innerSize())} target=${tw}x${th}`,
+      );
+    }
     const css = await innerSizeReady();
     expect(Math.abs(css.w - tw)).toBeLessThanOrEqual(2);
     expect(Math.abs(css.h - th)).toBeLessThanOrEqual(2);

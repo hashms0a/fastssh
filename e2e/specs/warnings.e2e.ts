@@ -21,7 +21,8 @@ describe("corrupt data files (Stage 1)", () => {
     await browser.reloadSession();
     await browser.pause(1500);
 
-    const banner = await byTestId("warnings-banner");
+    // Stage 2 moved the warnings banner onto the toast stack (task 2.12).
+    const banner = await byTestId("toasts");
     await expect(banner).toBeExisting();
     // (li.getText() comes back empty through WebKitWebDriver; read the HTML.)
     const html = await banner.getHTML();
@@ -38,7 +39,10 @@ describe("corrupt data files (Stage 1)", () => {
     expect(fs.readFileSync(path.join(configDir, aside ?? ""), "utf8")).toContain('"trunc');
 
     await shot("stage_01", "warnings-banner.png");
-    await (await byTestId("warnings-dismiss")).click();
+    // Two warning toasts per file (parse error + rename note); dismissing
+    // the warnings group clears all of them.
+    const dismissals = await $$('[data-testid="warnings-dismiss"]');
+    await dismissals[0]!.click();
     await expect(banner).not.toBeExisting();
 
     // Exact restart proof (acceptance "size is the same, within 2 px"):

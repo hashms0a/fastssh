@@ -41,3 +41,12 @@ body {
     Roboto,
     sans-serif;
 }
+
+/* e2e sessions: 14px base keeps coordinates stable on this HiDPI setup;
+   transitions on rows confuse WebKitWebDriver's pointer hit-testing. */
+body[data-fs-env*="e2e"] {
+  font-size: 14px;
+}
+body[data-fs-env*="e2e"] [data-testid="host-row"] {
+  transition: none;
+}
