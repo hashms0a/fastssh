@@ -113,19 +113,19 @@ item10` fails once the library carries `web-1x`/copies from the library
 
 ## 5. Stage gate output (last run)
 
+`tools/verify.sh full library` (one run, end of stage):
+
 ```
-prettier       OK
-eslint         OK
-tsc            OK
-vitest         OK      85 tests / 12 files
-cargo fmt      OK
-clippy         OK
-cargo test     OK      40 tests
-real files     OK
-debug build    OK
-smoke          OK
-e2e library    FAIL     (test 7, see Known issues; tests 1-6 pass)
+prettier       OK   1s      cargo fmt      OK   0s
+eslint         OK   2s      clippy         OK   1s
+tsc            OK   1s      cargo test     OK   8s     (40 tests)
+vitest         OK   1s      real files     OK   0s
+(85 tests, 12 files)        debug build    OK   9s
+                           smoke          OK   8s
+                           e2e library    FAIL 132s   (test 7; 1-6 pass, bail)
 ```
+
+`tools/verify.sh full smoke` passed end-to-end right after task 3.0.
 
 ## 6. Check on a real device ([human])
 
@@ -145,6 +145,8 @@ e2e library    FAIL     (test 7, see Known issues; tests 1-6 pass)
   WebKitWebDriver.
 - Tunnel rules carry index-based ids (`t0`, `t1`) instead of random uuids so
   the rows keep focus while typing.
+- `HostRow` shows the _account_ user in the `user@host:port` line
+  (`resolveCredentials`), which Stage 2 asserted and Stage 3 made observable.
 
 ## 8. Next (Stage 4)
 
