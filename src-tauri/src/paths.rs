@@ -42,11 +42,12 @@ pub fn expand_tilde(p: &str) -> PathBuf {
 }
 
 #[cfg(test)]
+/// Serializes the tests that mutate the process environment.
+pub static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn overrides_win_when_vars_set() {

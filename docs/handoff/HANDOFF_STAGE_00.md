@@ -261,6 +261,8 @@ webkitgtk-webdriver gnome-screenshot`
 
 - Git identity: keep `FastSSH Dev <dev@fastssh.local>` (repo-local) or set
   your own via `git config user.name/user.email` in fastssh/?
+  FastSSH-Dev/dev@fastssh.local
 - The runtime line shows "ubuntu/wayland" (from XDG_CURRENT_DESKTOP).
   Show "GNOME/wayland" instead in Stage 2? Cosmetic; plan's acceptance
   example says "GNOME/wayland".
+  Show "GNOME/wayland" instead in Stage 2

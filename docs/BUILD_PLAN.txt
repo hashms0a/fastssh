@@ -3168,7 +3168,7 @@ docs/handoff/HANDOFF_STAGE_00.md and the "Stage 00" git commit.
 Every later session:
 ```text
 Continue building FastSSH in ~/src/fastssh.
-1. Read docs/FASTSSH_BUILD_PLAN.txt, then the newest file in docs/handoff/.
+1. Read docs/BUILD_PLAN.txt, then the newest file in docs/handoff/.
 2. Run the session-start checks (plan rule 8). Start the test target
    (Section 10 step 1) and confirm the current code builds and all tests
    pass BEFORE changing anything; report any failure first.
@@ -3183,7 +3183,7 @@ Continue building FastSSH in ~/src/fastssh.
 Partial or failed stage:
 ```text
 Continue FastSSH in ~/src/fastssh.
-Stage <NN> is "Partially complete". Read docs/FASTSSH_BUILD_PLAN.txt and
+Stage <NN> is "Partially complete". Read docs/BUILD_PLAN.txt and
 docs/handoff/HANDOFF_STAGE_<NN>.md. Finish ONLY the items under "Known
 issues / TODOs" and any failed Acceptance bullets of Stage <NN>. Do not start
 the next stage. Re-run all verification commands, update the SAME handoff

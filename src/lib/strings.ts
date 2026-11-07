@@ -5,4 +5,8 @@ export const strings = {
     `FastSSH ${version} - ${desktop}/${session} - AppImage: ${appimage ? "yes" : "no"} - DMABUF disabled: ${dmabuf ? "yes" : "no"}`,
   sidebarHosts: "Hosts",
   sidebarAccounts: "Accounts",
+  bootErrorTitle: "FastSSH could not load its library",
+  quit: "Quit",
+  dismiss: "Dismiss",
+  loading: "Loading\u2026",
 } as const;

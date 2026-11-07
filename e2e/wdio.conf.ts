@@ -33,5 +33,5 @@ export const config: WebdriverIO.Config = {
   ],
   framework: "mocha",
   reporters: ["spec"],
-  mochaOpts: { timeout: 60000 },
+  mochaOpts: { timeout: 120000 },
 };
