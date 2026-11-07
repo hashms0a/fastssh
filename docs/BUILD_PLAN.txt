@@ -1,0 +1,3197 @@
+================================================================================
+ FASTSSH
+ STAGED BUILD PLAN FOR AN LLM CODING AGENT
+ A Tauri v2 (Rust + React/TypeScript) SSH connection manager and terminal
+ multiplexer for Ubuntu (GNOME) and Kubuntu (KDE Plasma), shipped as an AppImage.
+================================================================================
+
+Assumptions (inputs that were missing; defaults chosen, see Section 2):
+  - <PLAN_DIR> means the folder that holds this plan file and the spec
+    (fastssh_tauri_v2_agent_specification.md). The project root is
+    <PLAN_DIR>/fastssh, a new subfolder. All relative paths below are from
+    the project root. Replace <PLAN_DIR> with the real absolute path
+    wherever a command uses it.
+  - The build machine is any x86_64 desktop running Ubuntu 22.04 or later
+    or an official flavour (Kubuntu, Xubuntu...), with a graphical session
+    (GNOME or KDE Plasma, Wayland or X11). The plan assumes NO tool is
+    preinstalled. Stage 0A detects the desktop, session, GPU and tools and
+    records them as the "machine profile" in HANDOFF_STAGE_00, section 2.
+    Later stages use that profile.
+  - Build machine = test target. There is no separate device.
+  - SSH servers for testing come from a local container. Docker is the
+    default; rootless Podman also works (Stage 0A, A.8). If the owner chose
+    Podman, replace `docker` with `podman` in every command and record this.
+  - Legacy EasySSH 1.7.9 files use kebab-case keys ("identity-file",
+    "extra-arguments") and store "port" as a STRING. This was observed on a
+    real EasySSH install. FastSSH reads both spellings and writes the legacy
+    spelling.
+  - The release AppImage must be built against Ubuntu 22.04's glibc (2.35)
+    so it runs on 22.04 and later. If the build machine is 22.04, build on
+    the host. Otherwise build inside an Ubuntu 22.04 container (Stage 12).
+  - The agent drives the UI with WebdriverIO + tauri-driver + WebKitWebDriver.
+    The owner approves installing these in Stage 0A.
+
+
+================================================================================
+ HOW THIS DOCUMENT IS USED (read this first, LLM)
+================================================================================
+
+1.  Read this whole plan once. Then read the newest file in docs/handoff/.
+    The handoff is the source of truth for "what exists". The plan is the
+    source of truth for "what to build next". If they disagree about what
+    exists, believe the handoff and check the code.
+2.  Do ONLY the stage you were asked to do. Change earlier code only when the
+    current stage needs it. Record each such change under "Deviations" in the
+    handoff.
+3.  Before you finish a stage, run these from the project root, in order.
+    Each one MUST succeed:
+         npm install                         (lock file must not churn without reason)
+         npm run format                      (prettier --write)
+         npm run lint                        (0 errors, 0 warnings)
+         npm run typecheck                   (tsc --noEmit, 0 errors)
+         npm test                            (vitest run, all pass)
+         cd src-tauri && cargo fmt --check && cd ..
+         cd src-tauri && cargo clippy --all-targets -- -D warnings && cd ..
+         cd src-tauri && cargo test && cd ..
+         npm run tauri build -- --debug --no-bundle
+         npm run e2e                         (from Stage 0B on, if tauri-driver exists)
+    Then follow Section 10 (Testing workflow). If a command can't run in this
+    environment, write the exact error in the handoff. Do NOT claim it passed.
+4.  A stage is NOT complete until docs/handoff/HANDOFF_STAGE_<NN>.md exists.
+    Use the template in Section 9. Stage 0 writes HANDOFF_STAGE_00.md, Stage 1
+    writes HANDOFF_STAGE_01.md, and so on.
+5.  Add packages with the CLI so current versions resolve:
+         npm install <pkg>     |  npm install -D <pkg>
+         cargo add <crate>     (run inside src-tauri/)
+         npm run tauri add <plugin>   (adds Rust + JS side + capability)
+    Never type version numbers from memory into package.json or Cargo.toml.
+    The spec names floor versions: tauri 2, React 19, portable-pty 0.8. If
+    the resolved major version is newer, keep it, adapt the APIs and record
+    this.
+6.  Reference code is a skeleton. It shows intent and structure, not
+    finished code. Fix anything that doesn't compile. If a library API has
+    changed, check the library's current docs or source code
+    (node_modules/<pkg>/ or ~/.cargo/registry/src/). Then adapt it and record
+    the change. Do NOT copy blindly, and do NOT trust your memory of Tauri v1
+    APIs. Tauri v1 code (allowlist, tauri::api::*, @tauri-apps/api/tauri) is
+    wrong here.
+7.  File rules: keep every source file under 300 lines. Split it before it
+    grows past that. Keep business logic out of React render bodies and out
+    of Tauri command handlers. Put it in pure modules (src/lib, src/terminal,
+    src-tauri/src/*.rs) that have unit tests. Command handlers only parse,
+    call and map errors.
+8.  Build machine: an x86_64 Ubuntu-family desktop (see Assumptions). Its
+    exact profile (OS release, desktop, session type, GPU, tool versions)
+    is recorded in HANDOFF_STAGE_00, section 2. Never assume a tool is
+    installed because a reference command uses it. At the start of every
+    session, run the quick checks below and compare them with the profile.
+    Record any change.
+         node -v; npm -v; rustc -V; cargo -V
+         echo "$XDG_CURRENT_DESKTOP $XDG_SESSION_TYPE"
+         docker ps --filter name=fastssh-sshd --format '{{.Status}}'
+9.  Test target: the same desktop session. The app runs in a sandbox
+    (~/fastssh-testenv, see Section 10), and ssh targets run in the
+    "fastssh-sshd" Docker container. See Section 10 for the testing workflow.
+10. Safety: NEVER run sudo, apt, rustup or global npm installs. Never
+    uninstall software, delete caches, pull Docker images, or upgrade any
+    toolchain without asking the owner first. To ask, give the exact command,
+    what it does and why it is needed. Then wait for a "yes". Read-only checks
+    need no permission.
+    Protect the owner's real data. You MUST NOT write, move or reformat
+    ~/.ssh/config, ~/.ssh/known_hosts, ~/.config/easyssh/ or
+    ~/.config/fastssh/. Never print the contents of files that may hold
+    passwords. Every manual run and every test uses the sandbox variables
+    FASTSSH_CONFIG_DIR, FASTSSH_SSH_DIR and FASTSSH_LEGACY_DIR (Section 10).
+11. Git: the repository is fastssh/. At the end of each stage, run:
+         git add -A && git commit -m "Stage NN: <title>"
+    Never commit private keys, the sandbox, or target/ and node_modules/.
+12. Never guess what the UI looks like. Take a screenshot (Section 10, step 5)
+    and open the PNG with your image-reading tool. Describe what you see in
+    the handoff.
+
+
+================================================================================
+ 1. PRODUCT SUMMARY
+================================================================================
+
+FastSSH is a desktop SSH connection manager. It rebuilds EasySSH 1.7.9 from
+scratch. The main window has a header bar, a left sidebar and a right
+workspace. The header bar holds New Connection, Local Shell, Bookmarks, a
+filter field and a menu. The sidebar lists Hosts (grouped, collapsible) or
+Shared Accounts. In the workspace, each selected host shows its own notebook
+of terminal tabs, or a landing card if it has no tabs. FastSSH drives the
+system's /usr/bin/ssh inside a PTY. It does not implement SSH itself.
+
+Core requirements (all MUST be implemented):
+  R1  Host library: add, edit, duplicate and remove hosts. Name, group, host,
+      port, user, password, identity file, account link, color, font,
+      tunnels, extra args and ssh_config block. Names are unique, and spaces
+      become "-". Errors appear inline ("Name is already taken").
+  R2  Shared Accounts: add, edit, duplicate and remove. Editing an account
+      updates username/password/identity_file of every host linked to it.
+      Renaming it updates the links. Deleting it asks before unlinking.
+  R3  Bookmarks popover: search, add, run and delete shell command bookmarks.
+      Run writes "<command>\n" into the active terminal.
+  R4  Persistence: hosts.json, accounts.json and bookmarks.json live in
+      hostsFolder (default ~/.config/fastssh). settings.json lives in
+      ~/.config/fastssh. Writes are atomic with mode 0600. A corrupt file is
+      kept, renamed and reported. It never crashes the app or gets
+      overwritten.
+  R5  One-click import from ~/.config/easyssh (legacy kebab-case keys, port
+      as a string). Existing names are skipped.
+  R6  Optional GPG symmetric encryption of hosts/accounts/bookmarks
+      (*.json.gpg). The passphrase goes over stdin with --passphrase-fd 0 and
+      never on argv. A passphrase modal unlocks the files at startup.
+  R7  Two-way ~/.ssh/config sync. The first enable makes a backup. Import
+      skips wildcards and puts new hosts in group "SSHConfig". Export is
+      atomic. The editor has a live ssh_config block.
+  R8  A built-in "Localhost" host in group "Local" lives only in memory. It
+      opens a local $SHELL in $HOME. The Local Shell header button does the
+      same.
+  R9  SSH command: standard mode runs
+      ssh user@host -p port [-i id] [-L/-R...] [extra]. Sync mode runs
+      ssh <name> [extra]. User-controlled values are shell-quoted.
+  R10 Host-owned notebooks: tabs belong to a host. Switching hosts never
+      unmounts terminals, and the scrollback survives. A host with 0 tabs
+      shows ConnectionLanding (Connect/Edit/Remove). Connect works from the
+      button, the "+" tab button and a double-click in the sidebar.
+  R11 Prompt heuristics: the password is sent automatically, once, before
+      login. A fingerprint (yes/no) modal appears. A connection-error modal
+      has Retry and Close. Login is detected. A clean logout closes the tab.
+  R12 Terminal behaviour: host color/font, falling back to settings;
+      scrollback (-1 means 50000); audible bell toggle; clickable web links;
+      a right-click context menu; copy, paste and select-all.
+  R13 Unread-output dot on tabs and sidebar rows. An open-tab count badge on
+      each HostRow. Focusing a tab clears its dot.
+  R14 Search toolbar on Ctrl+Shift+F with Next (Ctrl+G), Previous
+      (Ctrl+Shift+G), Cyclic and Case-insensitive toggles.
+  R15 Alt+C copies the last command's output. Alt+Up scrolls to the start of
+      the last command.
+  R16 "Show in File Browser" (Ctrl+Shift+E or the context menu) opens
+      sftp://user@host:port. It tries xdg-open first, then kioclient exec,
+      then dolphin.
+  R17 Every shortcut in Section 9 of the spec works. Shortcuts are not
+      swallowed by the terminal, and key auto-repeat cannot spawn a burst of
+      tabs.
+  R18 Preferences modal (General + Appearance) covers every AppSettings
+      field. Dark/light theme applies at once.
+  R19 Window and session state: window size, maximized state and sidebar
+      width persist. When restoreHosts is on, the tabs that were open at quit
+      are reopened. Ctrl+Q and the window close button both flush state.
+  R20 Every subprocess (ssh, sh, gpg, xdg-open, kioclient, dolphin) runs with
+      the sanitized host environment. WEBKIT_DISABLE_DMABUF_RENDERER=1 is set
+      at startup unless it is already set.
+  R21 A self-contained AppImage FastSSH_<version>_amd64.AppImage. It launches
+      and works on Kubuntu (KDE Wayland) and on Ubuntu (GNOME).
+  R22 Navigation: the sidebar toggles between Hosts and Accounts. Groups are
+      collapsible and their state persists. Hosts are naturally sorted
+      (db2 before db10). The header filter narrows the list. WelcomeView
+      appears when the library is empty.
+
+Optional enhancements: Stage 11 (prioritized P1/P2/P3). Idea bank: Section 7.
+
+
+================================================================================
+ 2. TECHNICAL DECISIONS
+================================================================================
+
+Platform:        Linux x86_64 only. Ubuntu 22.04 and later, and its flavours,
+                 on GNOME or KDE Plasma, under X11 or Wayland.
+Distribution:    AppImage only (bundle.targets = ["appimage"]). Version 1.0.0.
+                 Identifier io.github.fastssh.app.
+Shell framework: Tauri v2. The Rust backend owns all I/O. The WebKitGTK 4.1
+                 webview runs the React UI.
+Frontend:        React 19, TypeScript (strict), Vite. Dev port 1420 (as in
+                 the spec).
+Styling:         Tailwind CSS v4 via @tailwindcss/vite. There is NO
+                 tailwind.config.js. Dark mode uses a "dark" class on <html>.
+                 Colors are CSS variables (Breeze/Yaru-like) in index.css.
+                 Reason: v4 is current. Agents often write v3 setup from
+                 memory, and that setup does not work with v4.
+State mgmt:      zustand. One store (useAppStore) built from slices in
+                 src/store/slices/. Components select narrow slices so that
+                 PTY output does not re-render the sidebar.
+Terminal:        @xterm/xterm with addon-fit, addon-search and
+                 addon-web-links. Default DOM renderer, no WebGL addon,
+                 because WebGL in WebKitGTK is unreliable on some
+                 GPU/Wayland combinations.
+                 Terminal objects live in a registry outside React (see
+                 Stage 4).
+PTY:             portable-pty. One reader thread and one wait thread per
+                 session. Output is decoded to UTF-8 at chunk boundaries in
+                 Rust (utf8_chunker.rs) and emitted as Tauri events.
+Event naming:    "pty-output-<sessionId>" and "pty-exit-<sessionId>".
+                 sessionId is a fresh UUID for each spawn. A tab keeps its
+                 tabId across Retry. DEVIATION from the spec's
+                 "pty-output-<tabId>": with per-tab names, the exit event of
+                 a killed session could close the tab of its retry.
+SSH launch:      The PTY runs /bin/sh, and Rust writes " exec ssh ...\n" into
+                 it (the spec's pattern). The leading space keeps the line
+                 out of shell history. "exec" makes the PTY exit when ssh
+                 exits, so the exit code is reliable. DEVIATION: the spec
+                 writes plain "ssh".
+Sync-mode tunnels: In sync mode, tunnels are exported as LocalForward or
+                 RemoteForward lines in the generated block, and
+                 extra_arguments are appended to "ssh <name>". Otherwise
+                 they would be lost.
+Local shell:     $SHELL from the clean environment, or /bin/sh if unset. Its
+                 cwd is $HOME. No prompt heuristics run except the exit
+                 rule.
+Persistence:     JSON files, written by Rust (storage.rs) with
+                 tempfile::NamedTempFile in the same dir, then persist()
+                 (atomic rename) and fsync of the dir. Files are 0600 and
+                 the dir is 0700.
+                 hosts.json, accounts.json and bookmarks.json are top-level
+                 ARRAYS in the legacy EasySSH shape, plus the keys "id" and
+                 "ssh_config". settings.json is an object with
+                 "schemaVersion": 1. One schemaVersion in settings.json
+                 covers all files.
+File shape:      Legacy record keys on disk: name, group, host, port
+                 (STRING), username, password, identity-file,
+                 extra-arguments, account, color, font, tunnels, plus
+                 FastSSH's id and ssh_config. On read, both snake_case and
+                 kebab-case are accepted, and port may be a string or a
+                 number. Over IPC, Host uses the spec's snake_case with
+                 port as a number.
+Settings home:   settings.json is ALWAYS in the config dir. It stores
+                 hostsFolder, which can point elsewhere for the three data
+                 files.
+Sandbox paths:   paths.rs honours FASTSSH_CONFIG_DIR (instead of
+                 ~/.config/fastssh), FASTSSH_SSH_DIR (instead of ~/.ssh) and
+                 FASTSSH_LEGACY_DIR (instead of ~/.config/easyssh). When
+                 FASTSSH_SSH_DIR is set, ssh also gets
+                 -F <dir>/config -o UserKnownHostsFile=<dir>/known_hosts.
+                 Reason: testing must never touch the owner's real files.
+Encryption:      gpg (host binary). Flags: --batch --yes --quiet
+                 --pinentry-mode loopback --no-symkey-cache
+                 --passphrase-fd 0. loopback is required by gpg 2.1+.
+                 --no-symkey-cache stops gpg-agent from caching the
+                 passphrase, because with a cached one a wrong passphrase
+                 would still decrypt. The passphrase is held only in Rust
+                 memory (AppState). settings.json is never encrypted.
+Keychain:        Secret Service via D-Bus. It is optional (Stage 11, P2).
+                 gnome-keyring and kwalletd6 both provide it.
+Clipboard:       tauri-plugin-clipboard-manager. navigator.clipboard is
+                 unreliable in WebKitGTK.
+File dialog:     tauri-plugin-dialog, for picking the identity file. A typed
+                 text path always works as the fallback.
+Logging:         tauri-plugin-log writes to stdout and to
+                 ~/.local/share/io.github.fastssh.app/logs/. Rust uses the
+                 "log" macros. JS uses @tauri-apps/plugin-log through
+                 src/lib/log.ts. Never use console.log or println!.
+Window:          It starts hidden ("visible": false). Rust sets the saved
+                 size. The frontend calls show() after the first render.
+                 Rust force-shows the window after 5 s as a safety net.
+                 minWidth 800 and minHeight 500.
+Background:      Nothing runs in the background. On exit, every PTY child
+                 is killed (RunEvent::Exit), so no ssh process is orphaned.
+Graphics:        main() sets WEBKIT_DISABLE_DMABUF_RENDERER=1 unless it is
+                 already set. It does this AFTER the clean environment is
+                 captured, so child processes do not inherit it.
+Permissions:     Linux has no runtime permission prompts. Tauri
+                 capabilities (src-tauri/capabilities/default.json) must list
+                 every JS API used. A missing entry fails at runtime with
+                 "... not allowed".
+UI testing:      Unit: vitest + @testing-library/react with
+                 @tauri-apps/api/mocks. E2E: WebdriverIO + tauri-driver +
+                 WebKitWebDriver. Every interactive element gets a
+                 data-testid.
+
+Known limitations to handle gracefully:
+  - gpg missing: the Encrypt toggle is disabled with a tooltip "Install
+    gnupg to enable encryption". The library still loads.
+  - Wrong passphrase: the modal shows "Wrong passphrase" and stays open. No
+    file is written. Cancel quits the app, after a confirm, because without
+    the passphrase there is no data.
+  - No file manager responds: a toast "Could not open a file browser. Copy
+    this address: sftp://..." appears, with a Copy button.
+  - ~/.ssh/config unreadable or not writable: a toast with the OS error.
+    Sync stays on, but export is skipped until the next successful save.
+  - ~/.ssh/config is a symlink (dotfile managers): write to the resolved
+    target so the link is never replaced by a file.
+  - A corrupt data file: it is renamed to <name>.corrupt-<unix-ts>. The app
+    starts with an empty list and a warning banner names the renamed file.
+  - The shell prompt is not recognised (zsh "%", fish): auto-login detection
+    misses. The session still works, but the tab is not auto-closed on
+    "logout". It does close on process exit, which exec guarantees.
+  - The host key changed (MITM warning): this is shown as a connection error
+    whose message tells the user to run ssh-keygen -R <host>. FastSSH never
+    edits known_hosts.
+  - libfuse2 missing on the end-user machine: the README documents
+    --appimage-extract-and-run.
+  - glibc: an AppImage runs only on systems whose glibc is the same as or
+    newer than the build system's. The release build therefore targets
+    Ubuntu 22.04 (on the host if it is 22.04, otherwise in a container,
+    Stage 12).
+
+
+================================================================================
+ 3. PROJECT STRUCTURE (target end state)
+================================================================================
+
+fastssh/
+  CLAUDE.md                     # short pointer: read docs/BUILD_PLAN.txt + handoff
+  README.md                     # user + developer docs (Stage 12)
+  package.json                  # scripts: dev, build, tauri, test, lint, e2e...
+  package-lock.json
+  index.html
+  vite.config.ts                # react + tailwind plugins, vitest config
+  tsconfig.json  tsconfig.node.json
+  eslint.config.js              # flat config, typescript-eslint, react-hooks
+  .prettierrc.json  .gitignore
+  docs/
+    FASTSSH_BUILD_PLAN.txt	# copy of this plan
+    fastssh_tauri_v2_agent_specification.md	# copy of fastssh_tauri_v2_agent_specification.md
+    MANUAL_CHECKS.md            # things only a human can verify (Stage 12)
+    handoff/HANDOFF_STAGE_NN.md # one per stage
+    screenshots/stage_NN/*.png
+  tools/
+    make_fixtures.sh            # builds ~/fastssh-testenv sandbox + fixtures
+    screenshot.sh               # desktop-aware screenshot (GNOME/KDE/X11)
+    dev-sandbox.sh              # runs the app with sandbox env vars
+    test-sshd/Dockerfile        # Ubuntu 24.04 + openssh-server test target
+    appimage-jammy/Dockerfile   # 22.04 release build image (Stage 12)
+    build-appimage-jammy.sh     # runs the release build in that image
+  e2e/
+    wdio.conf.ts                # WebdriverIO + tauri-driver, sandbox env
+    helpers.ts                  # shot(), byTestId(), sandbox reset helpers
+    specs/smoke.e2e.ts          # window opens, title, screenshot
+    specs/library.e2e.ts        # hosts/accounts CRUD (Stage 3)
+    specs/terminal.e2e.ts       # local shell tabs (Stage 4)
+    specs/ssh.e2e.ts            # docker sshd flows (Stage 5)
+    specs/tools.e2e.ts          # search, Alt+C, shortcuts (Stage 6)
+    specs/bookmarks.e2e.ts      # bookmarks + sftp (Stage 7)
+    specs/preferences.e2e.ts    # prefs + restore (Stage 8)
+    specs/sshconfig.e2e.ts      # sync (Stage 9)
+    specs/gpg.e2e.ts            # encryption + import (Stage 10)
+  src/
+    main.tsx                    # bootstrap: load_all before first render
+    App.tsx                     # layout, ModalHost, shortcuts, close handling
+    index.css                   # tailwind import, theme CSS variables
+    types/models.ts             # Host, Account, Bookmark, AppSettings, Tab...
+    store/useAppStore.ts        # combines slices
+    store/slices/librarySlice.ts   # hosts/accounts/bookmarks + save calls
+    store/slices/settingsSlice.ts  # settings + debounced save + flush
+    store/slices/uiSlice.ts        # sidebar mode, selection, filter, toasts
+    store/slices/tabsSlice.ts      # tabs per host, active tab, unread
+    store/slices/modalSlice.ts     # modal queue
+    lib/ipc.ts                  # typed invoke() wrappers, one per command
+    lib/strings.ts              # ALL user-visible strings
+    lib/log.ts                  # logging wrapper over plugin-log
+    lib/debounce.ts             # debounce with flush()/cancel()
+    lib/naturalSort.ts          # db2 < db10 comparator
+    lib/hostUtils.ts            # normalizeName, validateHost, resolveCredentials
+    lib/tunnels.ts              # parse/serialize "-L a:b:c,-R ..."
+    lib/sshConfigBlock.ts       # live ssh_config block sync
+    lib/colors.ts               # rgb()/hex normalisation, contrast fg
+    lib/fontSpec.ts             # "Monospace 11" -> {family,size}
+    terminal/terminalRegistry.ts   # xterm instances outside React
+    terminal/sessionController.ts  # spawn/retry/kill + event wiring per tab
+    terminal/promptWatcher.ts      # pure heuristics state machine
+    terminal/lastCommand.ts        # markers for Alt+C / Alt+Up
+    hooks/useShortcuts.ts       # global key matrix
+    hooks/useWindowState.ts     # track size/maximized -> settings
+    hooks/useCloseHandler.ts    # close button -> flush (S1) / quit flow (S8)
+    hooks/useRestoreTabs.ts     # reopen openedHosts once after hydrate (S8)
+    components/HeaderBar.tsx
+    components/BookmarksPopover.tsx
+    components/SearchToolbar.tsx
+    components/ContextMenu.tsx  # generic positioned menu
+    components/Toasts.tsx
+    components/Splitter.tsx     # sidebar resize handle (panelSize)
+    components/BootError.tsx    # shown when load_all fails at boot
+    components/Sidebar/SourceListView.tsx
+    components/Sidebar/HostRow.tsx
+    components/Sidebar/AccountRow.tsx
+    components/Workspace/WorkspaceEmptyState.tsx  # picks Welcome vs Landing
+    components/Workspace/WelcomeView.tsx
+    components/Workspace/ConnectionLanding.tsx
+    components/Workspace/HostNotebook.tsx
+    components/Workspace/TerminalPane.tsx
+    components/Editors/EditorOverlay.tsx  # absolute overlay host for editors
+    components/Editors/ConnectionEditor.tsx
+    components/Editors/TunnelsEditor.tsx
+    components/Editors/AccountEditor.tsx
+    components/Editors/ErrorRevealer.tsx
+    components/Modals/ModalHost.tsx       # renders head of modal queue
+    components/Modals/ConfirmDialog.tsx
+    components/Modals/PreferencesModal.tsx
+    components/Modals/FingerprintModal.tsx
+    components/Modals/ConnectionErrorModal.tsx
+    components/Modals/GpgPasswordModal.tsx
+    test/setup.ts               # jest-dom, IPC mock reset
+    test/ipcMock.ts             # mockIPC helpers with in-memory backend
+    (unit tests sit next to their module: foo.ts -> foo.test.ts)
+  src-tauri/
+    Cargo.toml  Cargo.lock  build.rs  tauri.conf.json
+    capabilities/default.json   # every JS permission used
+    icons/                      # generated by `tauri icon` (Stage 12)
+    icons/source/fastssh.svg    # icon source (Stage 12)
+    tests/fixtures/             # legacy_hosts.json, corrupt.json, ssh_config_sample
+    src/
+      main.rs                   # env capture, DMABUF var, run()
+      lib.rs                    # builder, plugins, state, handlers, exit hook
+      env_sanitize.rs           # clean host env for every child (MANDATORY)
+      paths.rs                  # config/ssh/legacy dirs + sandbox overrides
+      error.rs                  # AppError (serializable, user-facing message)
+      models.rs                 # Host, Account, Bookmark, legacy record mapping
+      settings.rs               # AppSettings, defaults, lenient parse, migrate
+      storage.rs                # atomic read/write, corrupt handling, load_all
+      utf8_chunker.rs           # split-safe UTF-8 decoding of PTY bytes
+      pty_manager.rs            # sessions: spawn, write, resize, kill, events
+      ssh_command.rs            # build ssh command line, shell quoting
+      file_browser.rs           # sftp:// launcher + open_url
+      ssh_config.rs             # parse, import, export, backup
+      gpg.rs                    # encrypt/decrypt via stdin
+      legacy_import.rs          # ~/.config/easyssh import
+      keychain.rs               # optional Secret Service cache (Stage 11)
+      commands/mod.rs           # re-exports
+      commands/system.rs        # get_runtime_info, quit_app, open_* (R16)
+      commands/library.rs       # load_all, save_* (R4)
+      commands/session.rs       # spawn/write/resize/kill (R9)
+      commands/sync.rs          # ssh_config commands (R7)
+      commands/crypto.rs        # unlock, set_encryption, import_easyssh
+
+
+================================================================================
+ 4. STAGES OVERVIEW
+================================================================================
+
+Stage 0   0A environment audit + sandbox fixtures; 0B project setup, skeleton,
+          env_sanitize + DMABUF fix, test harness.                    (R20)
+Stage 1   Data model + persistence (Rust storage, settings schema, store,
+          load before first frame, debounced save, window size).  (R4, R19a)
+Stage 2   App shell: header bar, sidebar (Hosts/Accounts, groups, natural
+          sort, filter), WelcomeView, ConnectionLanding, theme.   (R22, R8a)
+Stage 3   Editors: ConnectionEditor (+tunnels, live ssh_config block),
+          AccountEditor, ErrorRevealer, duplicate/remove, propagation.
+                                                                  (R1, R2)
+Stage 4   PTY manager + terminal: local shell tabs, HostNotebook, registry,
+          no-unmount switching, resize.                  (R8, R10, R12a, R20)
+Stage 5   SSH connections + prompt heuristics + fingerprint/error modals,
+          tested against the Docker sshd.                         (R9, R11)
+Stage 6   Terminal tools: search toolbar, Alt+C/Alt+Up, unread badges,
+          context menu, clipboard, full shortcut matrix. (R12-R15, R17)
+Stage 7   Bookmarks popover + SFTP file browser + web links.     (R3, R16)
+Stage 8   Preferences modal + session restore + quit flow.       (R18, R19)
+Stage 9   Two-way ~/.ssh/config sync.                                 (R7)
+Stage 10  GPG encryption + EasySSH import.                       (R5, R6)
+Stage 11  Recommended enhancements (optional, P1 -> P3).
+Stage 12  Polish, error-handling review, accessibility, icon, full tests,
+          22.04 AppImage release build, README.                       (R21)
+
+Every stage ends with an app that builds, passes all tests and runs in the
+sandbox. Each stage below lists: Goal, Tasks, Reference code, Notes,
+Acceptance.
+
+
+================================================================================
+ 5. STAGE DETAILS
+================================================================================
+
+--------------------------------------------------------------------------------
+STAGE 0A: ENVIRONMENT AUDIT AND TEST DATA
+--------------------------------------------------------------------------------
+Goal: You know exactly what the machine has, the owner has approved every
+missing install, a sample Tauri app builds and opens, and the sandbox
+fixtures exist.
+
+Run every check and record what it shows. Collect everything that needs an
+install or sudo into ONE numbered proposal list. Show it to the owner. Wait
+for "yes" (all or per item) before running any of it.
+
+A.1 OS, CPU, disk, RAM
+         cat /etc/os-release | head -4; uname -srm; nproc
+         free -h; df -h ~ /tmp
+    Good: Ubuntu/Kubuntu 22.04 or later, x86_64, at least 15 GB free in ~,
+    and at least 8 GB RAM. Rust target dirs grow to 5-10 GB. If less than
+    15 GB is free, warn the owner. Do not delete anything.
+
+A.2 Desktop session and GPU
+         echo "$XDG_CURRENT_DESKTOP $XDG_SESSION_TYPE $DESKTOP_SESSION"
+         plasmashell --version 2>/dev/null; gnome-shell --version 2>/dev/null
+         lspci | grep -iE 'vga|3d'
+    Record these in the machine profile: desktop (GNOME, KDE or other),
+    session (wayland or x11) and GPU vendor. The DMABUF fix targets
+    WebKitGTK blank windows, most often seen with NVIDIA on Wayland. If
+    this machine is NVIDIA + Wayland, it can verify the fix directly.
+    Otherwise add "verify on NVIDIA + Wayland" to the manual checks.
+
+A.3 Node and npm, and how they were installed
+         node -v; npm -v; command -v node; readlink -f "$(command -v node)"
+         ls -d ~/.nvm ~/.volta ~/.local/share/fnm 2>/dev/null
+         dpkg -S "$(readlink -f "$(command -v node)")" 2>/dev/null
+         snap list node 2>/dev/null
+    Good: Node 20 or 22 or later (LTS). The upgrade path depends on the
+    install method: nvm -> `nvm install --lts`; apt/NodeSource -> sudo apt;
+    snap -> `sudo snap refresh node`. Propose an upgrade only if Node is
+    below 20.
+
+A.4 Rust toolchain (may be missing)
+         rustc -V; cargo -V; rustup -V; ls ~/.cargo/bin 2>/dev/null
+         dpkg -l rustc cargo 2>/dev/null | grep ^ii
+    If Rust is missing, propose (ask first, it installs to ~/.rustup and
+    ~/.cargo):
+         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -c rustfmt -c clippy
+         . "$HOME/.cargo/env"
+    If rustc came from apt, its version may be too old for Tauri. Propose
+    rustup, and say the apt package stays installed. Good: rustc 1.80 or
+    later, with rustfmt and clippy.
+    After installing, new shells need ~/.cargo/bin on PATH. Check with
+    `bash -lc 'cargo -V'`.
+
+A.5 System build libraries (from spec 10.2, adjusted for the release)
+         for p in libwebkit2gtk-4.1-dev build-essential curl wget file \
+           libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
+           patchelf xdg-utils openssh-client gnupg libfuse2t64 libfuse2; do
+           printf '%-34s ' "$p"; dpkg-query -W -f='${Status} ${Version}\n' "$p" 2>/dev/null || echo MISSING; done
+         pkg-config --modversion webkit2gtk-4.1 javascriptcoregtk-4.1 libsoup-3.0
+    On 24.04 and later the FUSE package is libfuse2t64, not libfuse2. Only
+    one of them is needed. If a package does not exist on this release
+    (apt-cache policy <p> shows no candidate), record that and skip it.
+    The app uses no tray icon. Propose (ask first):
+         sudo apt-get update && sudo apt-get install -y <missing packages>
+
+A.6 Runtime tools the app calls
+         ssh -V; gpg --version | head -2; xdg-open --version
+         command -v kioclient dolphin nautilus gio kde-open
+         busctl --user list 2>/dev/null | grep -i 'org.freedesktop.secrets'
+    gpg must be 2.2.7 or later (needed for --no-symkey-cache). Record which
+    file managers exist. Only the CURRENT desktop's sftp path (Nautilus/GVFS
+    on GNOME, Dolphin/KIO on KDE) can be tested end to end. Add the other
+    one to the manual checks. Unit tests cover the fallback order.
+
+A.7 UI automation and screenshot tools
+         command -v WebKitWebDriver gnome-screenshot spectacle grim import
+         ls ~/.cargo/bin/tauri-driver 2>/dev/null
+    WebKitWebDriver comes from the apt package "webkit2gtk-driver".
+    tauri-driver comes from `cargo install tauri-driver --locked`. Propose
+    both (ask first).
+    Screenshots depend on the desktop. GNOME: gnome-screenshot (apt package
+    "gnome-screenshot"; often not preinstalled). KDE: spectacle. X11 on any
+    desktop: import (ImageMagick). wlroots compositors: grim. grim does not
+    work on GNOME or KDE, and import sees only X11 windows. Propose the tool
+    for this desktop if it is missing. Then save the helper below as
+    ~/fastssh-testenv/screenshot.sh (0B copies it to tools/). Test it once:
+         mkdir -p ~/fastssh-testenv && bash ~/fastssh-testenv/screenshot.sh /tmp/fastssh-shot-test.png full
+    Open the PNG to confirm that it shows the screen. On GNOME Wayland,
+    "window" mode may capture the full screen. That is acceptable.
+
+Reference: tools/screenshot.sh
+```bash
+#!/usr/bin/env bash
+# Usage: screenshot.sh <out.png> [window|full]   (window = active window)
+set -euo pipefail
+out="$1"; mode="${2:-window}"
+de="${XDG_CURRENT_DESKTOP^^}"; st="${XDG_SESSION_TYPE:-}"
+mkdir -p "$(dirname "$out")"
+if [[ $de == *KDE* ]] && command -v spectacle >/dev/null; then
+  if [[ $mode == full ]]; then spectacle -b -n -f -o "$out"; else spectacle -b -n -a -o "$out"; fi
+elif [[ $de == *GNOME* ]] && command -v gnome-screenshot >/dev/null; then
+  if [[ $mode == full ]]; then gnome-screenshot -f "$out"; else gnome-screenshot -w -f "$out"; fi
+elif [[ $st == x11 ]] && command -v import >/dev/null; then
+  import -window root "$out"
+elif command -v grim >/dev/null; then
+  grim "$out"
+else
+  echo "No screenshot tool for desktop '$de' session '$st'. Use e2e browser.saveScreenshot()." >&2
+  exit 2
+fi
+sleep 0.5; test -s "$out" && echo "saved $out"
+```
+
+A.8 Container runtime (test SSH server)
+         docker version --format '{{.Server.Version}}'; id -nG | tr ' ' '\n' | grep -x docker
+         podman --version
+         docker image ls ubuntu --format '{{.Repository}}:{{.Tag}}'
+    Good: docker works without sudo (the user is in the "docker" group), or
+    rootless podman exists. If neither exists, propose ONE of these (ask
+    first):
+         sudo apt-get install -y docker.io && sudo usermod -aG docker "$USER"
+                                 (then the owner must log out and back in)
+         sudo apt-get install -y podman      (rootless; no group change)
+    If the owner declines both, record it. The ssh stages (5, 7, 9) then test
+    only Localhost and the error paths, and each remote acceptance bullet is
+    marked "manual" for the owner to check against a server they own.
+    Building the test image pulls ubuntu:24.04. Ask before the first pull.
+    Publish the port ONLY on 127.0.0.1, so the throwaway password is not
+    exposed on the LAN.
+
+A.9 The owner's real data (read-only, protect)
+         ls -la ~/.ssh ~/.config/easyssh ~/.config/fastssh 2>&1
+         stat -c '%a %U %n' ~/.ssh/config 2>/dev/null
+    Record which files exist and their modes. Do NOT cat them. They hold
+    passwords. These paths are off-limits for writing (rule 10).
+
+A.10 Caches (read-only)
+         du -sh ~/.cargo ~/.rustup ~/.npm ~/.cache/tauri 2>/dev/null
+    Record the sizes. Never delete. ~/.cache/tauri holds linuxdeploy tools,
+    which Tauri downloads on the first AppImage build.
+
+A.11 Git
+         git --version; git config --global user.name; git config --global user.email
+    If the name or email is missing, ask the owner which values to use. Set
+    them later with `git config` (local to the repo) in 0B.
+
+A.12 Toolchain smoke test (after the approved installs). Use a throwaway
+     folder and keep the logs.
+         mkdir -p ~/fastssh-smoke && cd ~/fastssh-smoke
+         npm create tauri-app@latest -- --help        (read the flags; they change)
+         npm create tauri-app@latest smoke -- --template react-ts --manager npm --yes
+         cd smoke && npm install
+         npm run tauri build -- --debug --no-bundle 2>&1 | tail -20
+         (./src-tauri/target/debug/smoke &) ; sleep 6
+         bash ~/fastssh-testenv/screenshot.sh ~/fastssh-smoke/smoke.png ; pkill -f target/debug/smoke
+         NO_STRIP=true npm run tauri build -- --bundles appimage 2>&1 | tail -20
+         ls -lh src-tauri/target/release/bundle/appimage/
+    Open smoke.png and confirm it shows the template window, not a blank
+    white rectangle. If it is blank, run the binary again with
+    WEBKIT_DISABLE_DMABUF_RENDERER=1 and record the difference. This
+    explains why main.rs sets the variable.
+    Copy smoke.png to ~/fastssh-testenv/stage00-smoke.png before the cleanup
+    (0B moves it to docs/screenshots/stage_00/).
+    NO_STRIP=true avoids a known linuxdeploy failure on new distros
+    ("unable to recognise the format of .relr.dyn"). Record whether the
+    build fails without it.
+    Clean up only what you created:
+         rm -rf ~/fastssh-smoke                 (our own folder; caches stay)
+
+A.13 Test data and sandbox. Write the script below to
+     ~/fastssh-testenv/make_fixtures.sh and run it. 0B copies it into
+     tools/. It creates realistic fixtures with deliberate edge cases.
+     Then build and start the test sshd (after approval of A.8).
+         bash ~/fastssh-testenv/make_fixtures.sh
+         docker build -t fastssh-test-sshd ~/fastssh-testenv/sshd
+         docker run -d --name fastssh-sshd -p 127.0.0.1:2222:22 fastssh-test-sshd
+         ssh -F ~/fastssh-testenv/ssh/config -o UserKnownHostsFile=~/fastssh-testenv/ssh/known_hosts \
+             -i ~/fastssh-testenv/ssh/id_test -p 2222 keyuser@127.0.0.1 true && echo KEY-OK
+    The first connection asks a yes/no fingerprint question. Answer yes.
+    It only writes the SANDBOX known_hosts. Then reset the sandbox
+    known_hosts so the app can show the fingerprint modal later:
+         : > ~/fastssh-testenv/ssh/known_hosts
+
+Reference: tools/make_fixtures.sh
+```bash
+#!/usr/bin/env bash
+# Builds the FastSSH sandbox. Safe to re-run; --reset wipes ONLY the sandbox.
+set -euo pipefail
+T="${FASTSSH_TESTENV:-$HOME/fastssh-testenv}"
+[[ "${1:-}" == "--reset" ]] && rm -rf "$T/config" "$T/ssh" "$T/legacy" "$T/bad"
+mkdir -p "$T"/{config,ssh/"key dir",legacy,bad,sshd,big}
+chmod 700 "$T/config" "$T/ssh"
+[[ -f "$T/ssh/id_test" ]] || ssh-keygen -q -t ed25519 -N '' -C fastssh-test -f "$T/ssh/id_test"
+[[ -f "$T/ssh/key dir/id_space" ]] || ssh-keygen -q -t ed25519 -N '' -f "$T/ssh/key dir/id_space"
+cp "$T/ssh/id_test.pub" "$T/sshd/id_test.pub"
+touch "$T/ssh/known_hosts"
+cat > "$T/ssh/config" <<'EOF'
+# global options before any Host (preamble, must be preserved)
+ServerAliveInterval 30
+
+Host web1 web-alias
+    HostName 127.0.0.1
+    Port 2222
+    User keyuser
+    IdentityFile ~/fastssh-testenv/ssh/id_test
+
+Host db10
+  HostName=10.0.0.10
+  User=postgres
+Host db2
+	HostName 10.0.0.2
+	IdentityFile "~/fastssh-testenv/ssh/key dir/id_space"
+Host bastion
+    HostName bastion.example.invalid
+    ProxyJump web1
+Host !negated *.corp
+    User nobody
+Match host *.internal
+    User matched
+Include conf.d/*
+Host *
+    ServerAliveCountMax 3
+EOF
+chmod 600 "$T/ssh/config"
+# Legacy EasySSH shape: kebab-case keys, port as STRING, no id.
+cat > "$T/legacy/hosts.json" <<'EOF'
+[
+ {"name":"item10","host":"127.0.0.1","port":"2222","username":"tester","password":"fastssh-test-pass","group":"Lab","color":"rgb(0,43,54)","font":"Monospace 11","tunnels":"-L 18080:localhost:80","identity-file":"","extra-arguments":"-o ConnectTimeout=5","account":""},
+ {"name":"item2","host":"127.0.0.1","port":"2222","username":"","password":"","group":"Lab","color":"","font":"","tunnels":"","identity-file":"","extra-arguments":"","account":"lab-key"},
+ {"name":"my server","host":"192.0.2.10","port":"22","username":"root","password":"","group":"Unreachable","color":"","font":"","tunnels":"","identity-file":"","extra-arguments":"-o ConnectTimeout=5","account":""},
+ {"name":"Сервер-1","host":"127.0.0.1","port":"2299","username":"tester","password":"","group":"Unreachable","color":"#300a24","font":"Ubuntu Mono 13","tunnels":"","identity-file":"","extra-arguments":"","account":""},
+ {"name":"bad-port","host":"127.0.0.1","port":"abc","group":"Broken"}
+]
+EOF
+cat > "$T/legacy/accounts.json" <<'EOF'
+[{"name":"lab-key","username":"keyuser","password":"","identity-file":"~/fastssh-testenv/ssh/id_test"}]
+EOF
+cat > "$T/legacy/bookmarks.json" <<'EOF'
+[{"name":"uptime","command":"uptime"},{"name":"disk","command":"df -h"}]
+EOF
+printf '[{"name":"trunc' > "$T/bad/hosts.json"          # corrupt JSON
+: > "$T/bad/accounts.json"                               # empty file
+echo '{"not":"an array"}' > "$T/bad/bookmarks.json"      # wrong top-level type
+echo '{"windowWidth":"abc","scrollbackLines":99999999,"panelSize":-5}' > "$T/bad/settings.json"
+echo 'not gpg data' > "$T/bad/hosts.json.gpg"            # unsupported/corrupt gpg
+touch "$T/config/.hosts.json.swp"                         # hidden file to ignore
+python3 -I - "$T/big/hosts.json" <<'EOF'
+import json, sys
+hosts = [{"name": f"node{i}", "host": f"10.1.{i//250}.{i%250}", "port": str(22 + i % 3),
+          "username": "ops", "password": "", "group": f"rack{i % 50:02d}", "color": "",
+          "font": "", "tunnels": "", "identity-file": "", "extra-arguments": "",
+          "account": ""} for i in range(2000)]
+json.dump(hosts, open(sys.argv[1], "w"))
+EOF
+head -c 50M /dev/urandom | base64 > "$T/sshd/big.txt"     # large terminal output
+cat > "$T/sshd/Dockerfile" <<'EOF'
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-server \
+ && rm -rf /var/lib/apt/lists/* && mkdir -p /run/sshd
+RUN useradd -m -s /bin/bash tester && echo 'tester:fastssh-test-pass' | chpasswd \
+ && useradd -m -s /bin/bash keyuser && usermod -p '*' keyuser
+COPY id_test.pub /home/keyuser/.ssh/authorized_keys
+COPY big.txt /home/tester/big.txt
+RUN chown -R keyuser:keyuser /home/keyuser/.ssh && chmod 700 /home/keyuser/.ssh \
+ && chmod 600 /home/keyuser/.ssh/authorized_keys \
+ && printf 'PasswordAuthentication yes\nKbdInteractiveAuthentication no\n' > /etc/ssh/sshd_config.d/10-test.conf
+EXPOSE 22
+CMD ["/usr/sbin/sshd", "-D", "-e"]
+EOF
+echo "Sandbox ready at $T"
+```
+Notes:
+  - The fixtures cover: natural sort (item2 before item10, db2 before db10),
+    a name with a space ("my server" becomes "my-server"), Cyrillic text, a
+    port as a string, an invalid port, an account link, legacy color/font
+    strings, an existing tunnel, a refused port (2299), a timeout
+    (192.0.2.10, TEST-NET), a multi-alias Host line, Key=Value syntax, a
+    quoted path with a space, Match/Include/negated/wildcard blocks, corrupt,
+    empty and wrong-type JSON, bad settings values, a fake .gpg file, a
+    hidden file, 2000 hosts in 50 groups, and a 68 MB output file.
+  - The test password "fastssh-test-pass" is a throwaway value. It lives
+    only in the sandbox and in the container, which listens on 127.0.0.1.
+
+A.14 Record everything in docs/handoff/HANDOFF_STAGE_00.md. Until 0B
+     creates the repo, write it to ~/fastssh-testenv/HANDOFF_STAGE_00.md,
+     then move it in 0B. Record: versions, install methods, paths, the
+     approvals given ("approved by owner"), the smoke test result and its
+     screenshot path, the fixture location and the container status.
+     If the smoke test fails and you cannot fix it without an unapproved
+     change: set Status to "Partially complete", describe the failure with
+     its log tail, and STOP. Do not start 0B.
+
+Acceptance (0A):
+  - Every check A.1-A.13 has a recorded result in the handoff.
+  - The smoke binary showed a rendered window, confirmed by opening the
+    screenshot, and the smoke AppImage was produced.
+  - ~/fastssh-testenv exists with all fixtures. `docker ps` shows
+    fastssh-sshd as Up. The KEY-OK line printed.
+  - No file under ~/.ssh, ~/.config/easyssh or ~/.config/fastssh changed.
+    Compare `ls -la --time-style=full-iso` output before and after.
+
+--------------------------------------------------------------------------------
+STAGE 0B: PROJECT SETUP AND SKELETON
+--------------------------------------------------------------------------------
+Goal: `npm run tauri dev` opens a dark FastSSH window with a header bar
+placeholder and a runtime-info line. env_sanitize is in place with tests.
+All verification commands pass.
+
+Tasks:
+0B.1  Create the project (check the flags with --help first, as in A.12):
+         cd <PLAN_DIR>
+         npm create tauri-app@latest fastssh -- --template react-ts --manager npm --identifier io.github.fastssh.app --yes
+         cd fastssh && git init && npm install
+      Check that src-tauri/Cargo.toml has package name "fastssh" and lib
+      name "fastssh_lib". Fix them if not, because main.rs calls
+      fastssh_lib::run().
+         npm ls react     (if not 19.x: npm install react@19 react-dom@19 @types/react@19 @types/react-dom@19)
+0B.2  Add dependencies:
+         npm install zustand lucide-react @xterm/xterm @xterm/addon-fit @xterm/addon-search @xterm/addon-web-links
+         npm install -D tailwindcss @tailwindcss/vite vitest jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event
+         npm install -D eslint @eslint/js typescript-eslint eslint-plugin-react-hooks globals prettier
+         npm run tauri add clipboard-manager
+         npm run tauri add dialog
+         npm run tauri add log
+         cd src-tauri
+         cargo add portable-pty serde_json tempfile log dirs
+         cargo add serde --features derive
+         cargo add tokio --features full
+         cargo add uuid --features v4,serde
+         cd ..
+      Do not add the WebGL addon (Section 2). For e2e, only if tauri-driver
+      and WebKitWebDriver exist:
+         npm install -D @wdio/cli @wdio/local-runner @wdio/mocha-framework @wdio/spec-reporter tsx
+0B.3  Copy the docs and the test tooling:
+         mkdir -p docs/handoff docs/screenshots/stage_00 tools/test-sshd
+         cp ../FASTSSH_BUILD_PLAN.txt docs/BUILD_PLAN.txt
+         cp ../fastssh_tauri_v2_agent_specification.md docs/SPEC.md
+         cp ~/fastssh-testenv/make_fixtures.sh ~/fastssh-testenv/screenshot.sh tools/
+         chmod +x tools/*.sh
+         mv ~/fastssh-testenv/stage00-smoke.png docs/screenshots/stage_00/smoke.png
+         cp ~/fastssh-testenv/sshd/Dockerfile tools/test-sshd/
+         mv ~/fastssh-testenv/HANDOFF_STAGE_00.md docs/handoff/
+      Write CLAUDE.md (10-20 lines). It says: read docs/BUILD_PLAN.txt and
+      the newest handoff first; repeat rules 2, 3, 10 and 11 verbatim; and
+      says that docs/SPEC.md is the product spec, but where the plan
+      records a deviation, the plan wins.
+0B.4  .gitignore: node_modules/, dist/, src-tauri/target/, *.AppImage,
+      .env*, coverage/, e2e/.tmp/ and docs/screenshots/**/tmp_*.
+0B.5  tauri.conf.json: apply the spec's 10.1 block, with these changes:
+      "visible": false on the window, the default title "FastSSH", and
+      bundle.targets ["appimage"]. Keep the template's icon files for now.
+0B.6  capabilities/default.json, using the reference below.
+0B.7  env_sanitize.rs (reference below). This FIXES a spec bug: the spec's
+      sanitize_* functions call init_clean_environment() inside
+      OnceLock::get_or_init. That is reentrant initialization, and the
+      standard library may deadlock on it. Record this as a deviation.
+0B.8  main.rs, as in the spec 3.2. NOTE: if Cargo.toml uses edition 2024,
+      std::env::set_var is unsafe. Wrap it in `unsafe {}` with a comment:
+      this is sound because no other thread exists yet.
+0B.9  paths.rs with the sandbox overrides. lib.rs registers the plugins
+      (clipboard-manager, dialog, log) and the command get_runtime_info.
+      It also adds a 5 s force-show safety net.
+0B.10 Tailwind v4: add tailwindcss() to vite.config.ts plugins. index.css
+      starts with `@import "tailwindcss";` and
+      `@custom-variant dark (&:where(.dark, .dark *));`, then the theme
+      variables. Delete the template's App.css and demo assets.
+0B.11 src/lib/strings.ts, src/lib/log.ts and src/lib/ipc.ts
+      (getRuntimeInfo only). App.tsx renders: a header bar placeholder
+      (data-testid="header-bar"), a sidebar placeholder, and in the
+      workspace the line "FastSSH <version> - <desktop>/<session> -
+      AppImage: <yes/no> - DMABUF disabled: <yes/no>". It calls
+      getCurrentWindow().show() in useEffect.
+0B.12 Test harness: vitest config inside vite.config.ts (environment
+      jsdom, setupFiles src/test/setup.ts). One test for strings.ts.
+      package.json scripts:
+        "test": "vitest run", "lint": "eslint . --max-warnings 0",
+        "typecheck": "tsc --noEmit", "format": "prettier --write .",
+        "format:check": "prettier --check .", "e2e": "wdio run e2e/wdio.conf.ts"
+      eslint.config.js ignores dist and src-tauri/target. It enables
+      react-hooks/rules-of-hooks and exhaustive-deps as errors.
+0B.13 E2E skeleton: e2e/wdio.conf.ts, e2e/helpers.ts and
+      e2e/specs/smoke.e2e.ts (the window has the title FastSSH, the
+      header-bar exists, and it saves a screenshot). Follow the CURRENT
+      Tauri v2 docs page "Tests > WebDriver > WebdriverIO" for the
+      capability format, because it changed between WebdriverIO 8 and 9.
+0B.14 tools/dev-sandbox.sh (reference below). Make it executable.
+0B.15 Run every verification command (rule 3) and Section 10. Complete
+      HANDOFF_STAGE_00.md. Configure git user if needed (answer from A.11).
+      Commit "Stage 00: environment and project setup".
+
+Reference: src-tauri/src/env_sanitize.rs
+```rust
+use portable_pty::CommandBuilder;
+use std::collections::HashMap;
+use std::process::Command;
+use std::sync::OnceLock;
+
+static CLEAN_ENV: OnceLock<HashMap<String, String>> = OnceLock::new();
+
+const APPIMAGE_VARS: &[&str] = &[
+    "APPIMAGE", "APPDIR", "OWD", "ARGV0", "APPIMAGE_UUID", "LD_PRELOAD",
+    "GDK_PIXBUF_MODULE_FILE", "GDK_PIXBUF_MODULEDIR", "GSETTINGS_SCHEMA_DIR",
+    "GI_TYPELIB_PATH", "GTK_PATH", "GTK_EXE_PREFIX", "GTK_DATA_PREFIX",
+    "GTK_IM_MODULE_FILE", "GIO_MODULE_DIR", "GIO_EXTRA_MODULES",
+    "QT_PLUGIN_PATH", "PERLLIB", "PYTHONHOME", "PYTHONPATH",
+];
+
+/// Pure function so tests never touch the real process environment.
+pub fn build_clean_env(vars: impl IntoIterator<Item = (String, String)>) -> HashMap<String, String> {
+    let mut env: HashMap<String, String> = vars.into_iter().collect();
+    if env.contains_key("APPIMAGE") || env.contains_key("APPDIR") {
+        let appdir = env.get("APPDIR").cloned().unwrap_or_default();
+        for k in APPIMAGE_VARS { env.remove(*k); }
+        match env.remove("ORIGINAL_LD_LIBRARY_PATH") {
+            Some(orig) if !orig.is_empty() => { env.insert("LD_LIBRARY_PATH".into(), orig); }
+            Some(_) => { env.remove("LD_LIBRARY_PATH"); }
+            None => strip_var(&mut env, "LD_LIBRARY_PATH", &appdir),
+        }
+        // Catch-all: any remaining var whose value points into the mount.
+        let keys: Vec<String> = env.keys().cloned().collect();
+        for k in keys { strip_var(&mut env, &k, &appdir); }
+    }
+    env.insert("TERM".into(), "xterm-256color".into());
+    env.insert("COLORTERM".into(), "truecolor".into());
+    env
+}
+
+fn is_appdir_path(seg: &str, appdir: &str) -> bool {
+    (!appdir.is_empty() && seg.starts_with(appdir)) || seg.starts_with("/tmp/.mount_")
+}
+
+/// Only rewrites values that contain an AppDir path; others are untouched.
+fn strip_var(env: &mut HashMap<String, String>, key: &str, appdir: &str) {
+    let Some(val) = env.get(key).cloned() else { return };
+    if !val.split(':').any(|s| is_appdir_path(s, appdir)) { return; }
+    let kept: Vec<&str> = val.split(':').filter(|s| !s.is_empty() && !is_appdir_path(s, appdir)).collect();
+    if kept.is_empty() { env.remove(key); } else { env.insert(key.to_string(), kept.join(":")); }
+}
+
+pub fn init_clean_environment() { let _ = clean_env(); }
+
+pub fn clean_env() -> &'static HashMap<String, String> {
+    CLEAN_ENV.get_or_init(|| build_clean_env(std::env::vars()))
+}
+
+pub fn sanitize_std_command(cmd: &mut Command) {
+    cmd.env_clear();
+    cmd.envs(clean_env());
+}
+
+pub fn sanitize_pty_command(cmd: &mut CommandBuilder) {
+    cmd.env_clear();
+    for (k, v) in clean_env() { cmd.env(k, v); }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn v(p: &[(&str, &str)]) -> Vec<(String, String)> {
+        p.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()
+    }
+    #[test]
+    fn strips_appimage_entries() {
+        let e = build_clean_env(v(&[
+            ("APPDIR", "/tmp/.mount_FastSSabc"), ("APPIMAGE", "/x/F.AppImage"),
+            ("PATH", "/tmp/.mount_FastSSabc/usr/bin:/usr/bin:/bin"),
+            ("LD_LIBRARY_PATH", "/tmp/.mount_FastSSabc/usr/lib"),
+            ("XDG_DATA_DIRS", "/tmp/.mount_FastSSabc/usr/share:/usr/share"),
+            ("HOME", "/home/u"),
+        ]));
+        assert!(!e.contains_key("APPDIR") && !e.contains_key("APPIMAGE"));
+        assert!(!e.contains_key("LD_LIBRARY_PATH"));
+        assert_eq!(e["PATH"], "/usr/bin:/bin");
+        assert_eq!(e["XDG_DATA_DIRS"], "/usr/share");
+        assert_eq!(e["HOME"], "/home/u");
+        assert_eq!(e["TERM"], "xterm-256color");
+    }
+    // ALSO TEST: ORIGINAL_LD_LIBRARY_PATH restore (non-empty and empty),
+    // non-AppImage env is unchanged except TERM/COLORTERM,
+    // a value with no AppDir segment keeps its exact text (no ':' rewrite).
+}
+```
+
+Reference: src-tauri/src/paths.rs
+```rust
+use std::path::PathBuf;
+
+fn home() -> PathBuf { dirs::home_dir().expect("HOME must be set") }
+
+fn override_dir(var: &str) -> Option<PathBuf> {
+    std::env::var_os(var).filter(|v| !v.is_empty()).map(PathBuf::from)
+}
+
+/// ~/.config/fastssh (honours XDG_CONFIG_HOME) unless FASTSSH_CONFIG_DIR is set.
+pub fn config_dir() -> PathBuf {
+    override_dir("FASTSSH_CONFIG_DIR")
+        .unwrap_or_else(|| dirs::config_dir().unwrap_or_else(|| home().join(".config")).join("fastssh"))
+}
+pub fn ssh_dir() -> PathBuf { override_dir("FASTSSH_SSH_DIR").unwrap_or_else(|| home().join(".ssh")) }
+pub fn legacy_dir() -> PathBuf {
+    override_dir("FASTSSH_LEGACY_DIR").unwrap_or_else(|| home().join(".config").join("easyssh"))
+}
+/// True when testing against a sandbox ssh dir: ssh must get -F and UserKnownHostsFile.
+pub fn ssh_dir_overridden() -> bool { override_dir("FASTSSH_SSH_DIR").is_some() }
+
+/// Expands a leading "~/" (settings store "~/.config/fastssh").
+pub fn expand_tilde(p: &str) -> PathBuf {
+    match p.strip_prefix("~/") { Some(rest) => home().join(rest), None if p == "~" => home(), None => PathBuf::from(p) }
+}
+```
+
+Reference: src-tauri/capabilities/default.json
+```json
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Main window permissions",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-set-size",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-destroy",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
+    "dialog:allow-open",
+    "log:default"
+  ]
+}
+```
+The window label must match. Tauri names the first window "main" unless
+"label" is set. If tauri.conf.json sets a different label, use that one.
+
+Reference: tools/dev-sandbox.sh
+```bash
+#!/usr/bin/env bash
+# Runs FastSSH against the sandbox, never the owner's real files.
+set -euo pipefail
+T="${FASTSSH_TESTENV:-$HOME/fastssh-testenv}"
+export FASTSSH_CONFIG_DIR="$T/config" FASTSSH_SSH_DIR="$T/ssh" FASTSSH_LEGACY_DIR="$T/legacy"
+cd "$(dirname "$0")/.."
+case "${1:-dev}" in
+  dev)   exec npm run tauri dev ;;
+  debug) exec ./src-tauri/target/debug/fastssh ;;
+  appimage) exec ./src-tauri/target/release/bundle/appimage/FastSSH_*_amd64.AppImage ;;
+esac
+```
+
+Reference: e2e/wdio.conf.ts (shape only; adapt to the current Tauri docs)
+```ts
+import { spawn, type ChildProcess } from 'node:child_process';
+import os from 'node:os';
+import path from 'node:path';
+
+const T = process.env.FASTSSH_TESTENV ?? path.join(os.homedir(), 'fastssh-testenv');
+let driver: ChildProcess | undefined;
+
+export const config: WebdriverIO.Config = {
+  specs: ['./specs/**/*.e2e.ts'],
+  maxInstances: 1,
+  hostname: '127.0.0.1',
+  port: 4444,
+  capabilities: [{
+    // Some wdio versions also need browserName; check the Tauri docs.
+    'tauri:options': { application: '../src-tauri/target/debug/fastssh' },
+  } as WebdriverIO.Capabilities],
+  framework: 'mocha',
+  reporters: ['spec'],
+  mochaOpts: { timeout: 60000 },
+  beforeSession: () => {
+    driver = spawn(path.join(os.homedir(), '.cargo/bin/tauri-driver'), [], {
+      stdio: [null, process.stdout, process.stderr],
+      env: { ...process.env, FASTSSH_CONFIG_DIR: `${T}/config`,
+             FASTSSH_SSH_DIR: `${T}/ssh`, FASTSSH_LEGACY_DIR: `${T}/legacy` },
+    });
+  },
+  afterSession: () => { driver?.kill(); },
+};
+```
+Notes:
+  - e2e always runs the DEBUG binary. Build it first with
+    `npm run tauri build -- --debug --no-bundle`. A stale binary gives
+    misleading passes. Note the binary's mtime in the handoff.
+  - The capability file name in $schema exists only after the first build.
+    A red squiggle before that is fine.
+
+Acceptance (0B):
+  - All rule 3 commands pass. `cargo test` runs at least 4 env_sanitize
+    tests.
+  - ./tools/dev-sandbox.sh opens one window titled FastSSH. It is not blank.
+    The info line shows the desktop/session recorded in the machine
+    profile (e.g. "GNOME/wayland" or "KDE/x11") and "DMABUF disabled: yes".
+    Check with a screenshot.
+  - With WEBKIT_DISABLE_DMABUF_RENDERER=0 exported, the info line shows
+    "no". This proves an existing value is respected.
+  - npm run e2e passes the smoke spec, or the handoff says why it can't run.
+  - git log shows the "Stage 00" commit. `git status` is clean.
+
+--------------------------------------------------------------------------------
+STAGE 1: DATA MODEL AND PERSISTENCE
+--------------------------------------------------------------------------------
+Goal: The app loads hosts, accounts, bookmarks and settings from the sandbox
+before the first frame and saves changes atomically. Corrupt files are
+handled. Window size survives a restart.
+
+Tasks:
+1.1  error.rs: AppError { code: String, message: String }. It implements
+     serde::Serialize, so Tauri commands return Result<T, AppError>. The
+     message is user-facing and names the file and the OS error.
+     Provide From<std::io::Error> and From<serde_json::Error>.
+1.2  models.rs: Host, Account, Bookmark (IPC shape = spec 6.1-6.3) and
+     LegacyHostRecord (disk shape). Add the conversions and the lenient
+     parsing (reference below). Give each record without an id a new UUID.
+     Keep `local` out of the disk shape. (R4)
+1.3  settings.rs: AppSettings with schema_version, Default,
+     settings_from_value (per-field fallback and clamping) and
+     migrate(value, from_version). (R4, R19)
+1.4  storage.rs: atomic_write(path, bytes), read_array(path) and
+     load_all(). Rules: a missing file means an empty list. A corrupt file
+     or one with the wrong top-level type is renamed to
+     <file>.corrupt-<unix-ts> and adds a warning. Dotfiles in the folder
+     are ignored. The folder is created with mode 0700 and files with 0600.
+1.5  AppState (in lib.rs): Mutex<AppSettings> and
+     Mutex<Option<String>> passphrase (unused until Stage 10).
+     Commands in commands/library.rs: load_all -> LoadReport
+     { hosts, accounts, bookmarks, settings, warnings, locked: false,
+     legacy_available }, plus save_hosts, save_accounts, save_bookmarks and
+     save_settings. save_hosts drops any host with local == true. Run file
+     I/O with tokio::task::spawn_blocking so the IPC thread never blocks.
+1.6  lib.rs setup(): read the settings synchronously and set the window
+     size from them (LogicalSize). Maximize the window if windowMaximized.
+1.7  src/types/models.ts mirrors Rust exactly. It also has
+     DEFAULT_SETTINGS and the constant LOCALHOST_ID = "local-localhost".
+1.8  src/lib/debounce.ts: debounce(fn, ms) returning { call, flush,
+     cancel }. flush() runs a pending call immediately.
+1.9  The store: useAppStore with librarySlice and settingsSlice.
+     updateSettings(patch) merges the patch (copyWith semantics, see the
+     reference). It debounces save_settings by 400 ms. flushSettings()
+     saves at once.
+1.10 main.tsx: `await ipc.loadAll()` BEFORE createRoot().render(). On
+     failure, render components/BootError.tsx (the message and a Quit
+     button). Never render a blank window. Also add
+     storage::load_settings() (sync, tolerant), which lib.rs uses.
+1.11 hooks/useWindowState.ts: onResized and onMoved are debounced 500 ms.
+     It stores the logical size (physical size / scaleFactor) and the
+     maximized flag. It ignores sizes while maximized or fullscreen, so the
+     restore size is not overwritten by the screen size.
+1.12 hooks/useCloseHandler.ts. Flush on exit:
+     getCurrentWindow().onCloseRequested(async () =>
+     { await flushSettings(); }). Verify in the Tauri v2 docs that the
+     window waits for the async handler. If it does not, call
+     event.preventDefault(), flush, and then getCurrentWindow().destroy().
+     (R19)
+1.13 Warnings from LoadReport appear in a dismissible banner at the top of
+     the workspace. The full Toasts component comes in Stage 2. For now a
+     simple banner is enough.
+1.14 Tests (Rust): round-trip for each model. Legacy kebab and snake keys
+     both parse. Port "2222", 2222 and "abc" give 2222, 2222 and the
+     default 22 plus a warning. Settings: a missing field gives its
+     default, a wrong type gives its default, scrollbackLines 99999999 is
+     clamped, panelSize -5 is clamped. A corrupt file is renamed and its
+     bytes are preserved. atomic_write leaves no temp files and sets mode
+     0600. Tests (TS): debounce flush/cancel, and updateSettings ignores
+     undefined values.
+1.15 Write the e2e spec for persistence, or do the manual check from
+     Section 10 step 7.
+
+Reference: src-tauri/src/models.rs (excerpt)
+```rust
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+pub struct Host {
+    pub id: String, pub name: String, pub group: String, pub host: String,
+    pub port: u16, pub username: String, pub password: String,
+    pub identity_file: String, pub account: String, pub color: String,
+    pub font: String, pub tunnels: String, pub extra_arguments: String,
+    pub ssh_config: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local: Option<bool>,
+}
+
+fn s(o: &serde_json::Map<String, Value>, keys: &[&str]) -> String {
+    keys.iter().find_map(|k| o.get(*k)).and_then(|v| match v {
+        Value::String(x) => Some(x.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }).unwrap_or_default()
+}
+
+/// Accepts legacy (kebab, port string) and FastSSH shapes. Never panics.
+pub fn host_from_value(v: &Value, warnings: &mut Vec<String>) -> Option<Host> {
+    let o = v.as_object()?;
+    let name = s(o, &["name"]).trim().replace(' ', "-");
+    if name.is_empty() { warnings.push("Skipped a host with no name".into()); return None; }
+    let port_raw = s(o, &["port"]);
+    let port = match port_raw.trim().parse::<u16>() {
+        Ok(p) if p > 0 => p,
+        _ if port_raw.is_empty() => 22,
+        _ => { warnings.push(format!("Host \"{name}\": invalid port \"{port_raw}\", using 22")); 22 }
+    };
+    let id = Some(s(o, &["id"])).filter(|x| !x.is_empty())
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    Some(Host {
+        id, name, port,
+        group: s(o, &["group"]), host: s(o, &["host"]),
+        username: s(o, &["username"]), password: s(o, &["password"]),
+        identity_file: s(o, &["identity_file", "identity-file"]),
+        account: s(o, &["account"]), color: s(o, &["color"]), font: s(o, &["font"]),
+        tunnels: s(o, &["tunnels"]),
+        extra_arguments: s(o, &["extra_arguments", "extra-arguments"]),
+        ssh_config: s(o, &["ssh_config"]), local: None,
+    })
+}
+
+/// Disk shape: legacy keys so EasySSH can still read the file.
+pub fn host_to_value(h: &Host) -> Value {
+    serde_json::json!({
+        "id": h.id, "name": h.name, "group": h.group, "host": h.host,
+        "port": h.port.to_string(), "username": h.username, "password": h.password,
+        "identity-file": h.identity_file, "account": h.account, "color": h.color,
+        "font": h.font, "tunnels": h.tunnels, "extra-arguments": h.extra_arguments,
+        "ssh_config": h.ssh_config,
+    })
+}
+// Account and Bookmark follow the same pattern (Account has identity-file).
+```
+
+Reference: src-tauri/src/settings.rs (excerpt)
+```rust
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+
+pub const SCHEMA_VERSION: u32 = 1;
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenedHostState { pub host_name: String, pub tab_count: u32 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AppSettings {
+    pub schema_version: u32,
+    pub window_width: u32, pub window_height: u32, pub window_maximized: bool,
+    pub panel_size: u32, pub hosts_folder: String,
+    pub opened_hosts: Vec<OpenedHostState>,
+    pub terminal_background_color: String, pub terminal_font: String,
+    pub terminal_font_size: u32, pub use_dark_theme: bool,
+    pub restore_hosts: bool, pub sync_ssh_config: bool, pub encrypt_data: bool,
+    pub scrollback_lines: i32, pub audible_bell: bool,
+    pub collapsed_groups: Vec<String>,          // added in Stage 2 (R22)
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION, window_width: 1100, window_height: 640,
+            window_maximized: false, panel_size: 240,
+            hosts_folder: "~/.config/fastssh".into(), opened_hosts: vec![],
+            terminal_background_color: "#1e1e1e".into(),
+            terminal_font: "Ubuntu Mono, Noto Sans Mono, monospace".into(),
+            terminal_font_size: 13, use_dark_theme: true, restore_hosts: false,
+            sync_ssh_config: false, encrypt_data: false, scrollback_lines: -1,
+            audible_bell: true, collapsed_groups: vec![],
+        }
+    }
+}
+
+fn u(o: &Map<String, Value>, k: &str, d: u32, lo: u32, hi: u32) -> u32 {
+    o.get(k).and_then(Value::as_i64).map(|n| n.clamp(lo as i64, hi as i64) as u32).unwrap_or(d)
+}
+fn b(o: &Map<String, Value>, k: &str, d: bool) -> bool { o.get(k).and_then(Value::as_bool).unwrap_or(d) }
+fn st(o: &Map<String, Value>, k: &str, d: &str) -> String {
+    o.get(k).and_then(Value::as_str).filter(|x| !x.trim().is_empty()).unwrap_or(d).to_string()
+}
+
+/// Lenient: one bad field never discards the others.
+pub fn settings_from_value(v: Value) -> AppSettings {
+    let d = AppSettings::default();
+    let from = v.get("schemaVersion").and_then(Value::as_u64).unwrap_or(0) as u32;
+    let v = migrate(v, from);
+    let Some(o) = v.as_object() else { return d };
+    let sb = o.get("scrollbackLines").and_then(Value::as_i64).unwrap_or(-1);
+    AppSettings {
+        schema_version: SCHEMA_VERSION,
+        window_width: u(o, "windowWidth", d.window_width, 800, 10000),
+        window_height: u(o, "windowHeight", d.window_height, 500, 10000),
+        window_maximized: b(o, "windowMaximized", false),
+        panel_size: u(o, "panelSize", d.panel_size, 160, 600),
+        hosts_folder: st(o, "hostsFolder", &d.hosts_folder),
+        opened_hosts: o.get("openedHosts").cloned()
+            .and_then(|x| serde_json::from_value(x).ok()).unwrap_or_default(),
+        terminal_background_color: st(o, "terminalBackgroundColor", &d.terminal_background_color),
+        terminal_font: st(o, "terminalFont", &d.terminal_font),
+        terminal_font_size: u(o, "terminalFontSize", 13, 6, 48),
+        use_dark_theme: b(o, "useDarkTheme", true),
+        restore_hosts: b(o, "restoreHosts", false),
+        sync_ssh_config: b(o, "syncSshConfig", false),
+        encrypt_data: b(o, "encryptData", false),
+        scrollback_lines: if sb < 0 { -1 } else { sb.clamp(100, 100_000) as i32 },
+        audible_bell: b(o, "audibleBell", true),
+        collapsed_groups: o.get("collapsedGroups").cloned()
+            .and_then(|x| serde_json::from_value(x).ok()).unwrap_or_default(),
+    }
+}
+
+/// Migration hook. Add one arm per version bump; each arm upgrades by one.
+pub fn migrate(mut v: Value, from: u32) -> Value {
+    let mut ver = from;
+    while ver < SCHEMA_VERSION {
+        match ver {
+            0 => { /* v0 = no schemaVersion (fresh or hand-written); nothing to rename */ }
+            _ => {}
+        }
+        ver += 1;
+    }
+    if let Some(o) = v.as_object_mut() { o.insert("schemaVersion".into(), SCHEMA_VERSION.into()); }
+    v
+}
+```
+NOTE: collapsed_groups is listed here so the struct is final. Add it in
+Stage 2, following the "adding a field" rule below. It is shown in this
+reference to keep the names consistent.
+
+Reference: src-tauri/src/storage.rs (atomic write)
+```rust
+use std::{fs, io::Write, os::unix::fs::PermissionsExt, path::Path};
+
+pub fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let dir = path.parent().ok_or_else(|| std::io::Error::other("no parent dir"))?;
+    fs::create_dir_all(dir)?;
+    let mut tmp = tempfile::NamedTempFile::new_in(dir)?;   // same FS => atomic rename
+    tmp.write_all(bytes)?;
+    tmp.as_file().sync_all()?;
+    tmp.as_file().set_permissions(fs::Permissions::from_mode(0o600))?;
+    tmp.persist(path).map_err(|e| e.error)?;
+    fs::File::open(dir)?.sync_all()?;                      // persist the rename
+    Ok(())
+}
+
+/// Missing => empty; unreadable JSON => renamed aside + warning; never panics.
+pub fn read_array(path: &Path, warnings: &mut Vec<String>) -> Vec<serde_json::Value> {
+    let Ok(text) = fs::read_to_string(path) else { return vec![] };
+    if text.trim().is_empty() { return vec![]; }
+    match serde_json::from_str::<serde_json::Value>(&text) {
+        Ok(serde_json::Value::Array(a)) => a,
+        _ => {
+            let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            let aside = path.with_extension(format!("json.corrupt-{ts}"));
+            let _ = fs::rename(path, &aside);
+            warnings.push(format!("{} could not be read and was moved to {}", path.display(), aside.display()));
+            vec![]
+        }
+    }
+}
+```
+
+Reference: src/store/slices/settingsSlice.ts (excerpt)
+```ts
+import type { StateCreator } from 'zustand';
+import type { AppSettings } from '../../types/models';
+import { DEFAULT_SETTINGS } from '../../types/models';
+import { debounce } from '../../lib/debounce';
+import { ipc } from '../../lib/ipc';
+import { logError } from '../../lib/log';
+import type { AppStore } from '../useAppStore';
+
+export interface SettingsSlice {
+  settings: AppSettings;
+  updateSettings: (patch: Partial<AppSettings>) => void;
+  flushSettings: () => Promise<void>;
+}
+
+// copyWith semantics: keys whose value is `undefined` are ignored, so a
+// partially built patch can't wipe fields. To CLEAR a nullable field, the
+// field type must be `T | null` and the patch passes `null` explicitly.
+function applyPatch(s: AppSettings, patch: Partial<AppSettings>): AppSettings {
+  const clean = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+  return { ...s, ...clean };
+}
+
+export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> = (set, get) => {
+  const saver = debounce(() => {
+    ipc.saveSettings(get().settings).catch((e) => logError('save_settings failed', e));
+  }, 400);
+  return {
+    settings: DEFAULT_SETTINGS,
+    updateSettings: (patch) => { set({ settings: applyPatch(get().settings, patch) }); saver.call(); },
+    flushSettings: async () => { saver.cancel(); await ipc.saveSettings(get().settings); },
+  };
+};
+```
+
+Rule for adding a settings field in later stages (every stage that adds
+one MUST do all of these):
+  1. Add it to the Rust struct, Default, settings_from_value (with a
+     clamp or validation) and the TS AppSettings + DEFAULT_SETTINGS.
+  2. Add tests: round-trip, a missing key gives the default, a wrong type
+     gives the default.
+  3. Do NOT bump SCHEMA_VERSION for an added field (the lenient parse
+     covers it). Bump it only for a rename or a change of meaning, and
+     add a migrate() arm with a test.
+  4. List the field in the handoff's schema section.
+
+Notes:
+  - Load before the first frame avoids a flash of the welcome screen
+    followed by data. The window is hidden until then, and Rust's 5 s
+    force-show catches JS crashes.
+  - Library saves are NOT debounced. Each editor "Save" is one explicit
+    save, and losing an edit on a crash would be worse than an extra
+    write. Only settings, which change on every resize, are debounced.
+  - hostsFolder: if the value expands to a folder that does not exist,
+    create it. If it can't be created, fall back to the config dir and
+    add a warning. Never write data files to the old folder silently.
+  - Writes on a SIGKILL: the debounced settings can lose up to 400 ms of
+    changes. That is accepted. A data file is never half-written, because
+    the rename is atomic.
+
+Acceptance:
+  - Start the app with FASTSSH_CONFIG_DIR pointing to an empty dir: it
+    starts with defaults. Change the window size, close the window, then
+    relaunch: the size is the same (within 2 px).
+  - Copy ~/fastssh-testenv/bad/* into a fresh config dir and launch: the
+    app opens. The banner names the 3 renamed files. *.corrupt-* files
+    exist with their original bytes. settings.json values are clamped.
+  - Maximize, quit, relaunch: the window is maximized. Unmaximize: the
+    window returns to the previous restore size, not the screen size.
+  - Kill the app with SIGKILL during a resize, then relaunch: it still
+    loads valid JSON.
+  - `stat -c %a` gives 600 for each file in the config dir and 700 for the
+    dir.
+  - All Rust and TS tests listed in 1.14 pass.
+
+--------------------------------------------------------------------------------
+STAGE 2: APP SHELL (HEADER, SIDEBAR, WORKSPACE PLACEHOLDERS)
+--------------------------------------------------------------------------------
+Goal: The main window has the real layout. The header bar works, the sidebar
+lists the library (grouped, naturally sorted, filterable, collapsible) with a
+Hosts/Accounts toggle, and selecting a host shows ConnectionLanding.
+
+Tasks:
+2.1  uiSlice: sidebarMode ('hosts' | 'accounts'), selectedHostId,
+     selectedAccountId, filter, toasts (push/dismiss with auto-dismiss
+     after 6 s). Error toasts stay until they are dismissed.
+2.2  Inject Localhost: after load, put the in-memory host
+     { id: LOCALHOST_ID, name: "Localhost", group: "Local", local: true }
+     at the front of hosts. The Local group is always sorted first. (R8)
+2.3  lib/naturalSort.ts: compare names with Intl.Collator(undefined,
+     { numeric: true, sensitivity: 'base' }). Test item2 < item10,
+     db2 < db10, case-insensitivity and Cyrillic.
+2.4  HeaderBar: buttons New Connection (opens the editor in Stage 3; for
+     now it is disabled with a tooltip), Local Shell (selects Localhost),
+     Bookmarks (a placeholder until Stage 7), a filter input
+     (data-testid="host-filter") and a menu with Preferences (Stage 8),
+     Import from EasySSH (Stage 10), About and Quit. Items that are not
+     built yet are disabled with the tooltip "Coming soon". Do not hide
+     them, so that the layout is final.
+2.5  SourceListView: a Hosts/Accounts segmented toggle. Collapsible group
+     headers show a count. The collapsed state is stored in
+     settings.collapsedGroups (new field, follow the field rule). The
+     filter matches name, host, username and group, case-insensitive.
+     With 2000 hosts, typing must not lag, so memoize the grouped list
+     with useMemo keyed on hosts and filter.
+2.6  HostRow: the name, user@host:port in a smaller muted line, a slot for
+     the tab-count badge and a slot for the unread dot (both wired in
+     Stage 4/6). A single click selects. A double-click connects (wired in
+     Stage 4). Right-click opens components/ContextMenu.tsx with Connect,
+     Edit, Duplicate and Remove. The actions are wired in Stages 3 and 4.
+     Localhost has only Connect.
+2.7  AccountRow: the name and username, with a context menu (Edit,
+     Duplicate, Remove), wired in Stage 3.
+2.8  WelcomeView: when only Localhost exists, show "No connections yet"
+     with a New Connection button. On the Accounts side: "No shared
+     accounts" with a New Account button.
+2.9  ConnectionLanding: host name, user@host:port, and the buttons Connect,
+     Edit and Remove (data-testids landing-connect, landing-edit,
+     landing-remove).
+2.10 Layout: components/Splitter.tsx between the sidebar and the
+     workspace. components/Workspace/WorkspaceEmptyState.tsx picks
+     WelcomeView or ConnectionLanding.
+     Drag the handle, clamp the width to 160-600 px, and store it in
+     settings.panelSize (debounced through updateSettings). Keyboard: when
+     the handle is focused, Left and Right move it by 16 px.
+2.11 Theme: toggle the <html class="dark"> class from
+     settings.useDarkTheme. The palette lives in CSS variables
+     (--bg, --bg-alt, --fg, --muted, --accent, --border, --danger),
+     inspired by Breeze/Yaru. Dark: bg #1e1f22, accent #3daee9. Light:
+     bg #fcfcfc, accent #2a7ab0. Use `var(--x)` in Tailwind arbitrary
+     values, or define them with @theme.
+2.12 Toasts.tsx in the bottom-right, role="status" for info and
+     role="alert" for errors. Move the Stage 1 warnings banner onto toasts.
+2.13 Component tests: filtering, collapsing (persists via updateSettings
+     calls), natural order, Localhost first, and the double-click handler
+     is called.
+
+Notes:
+  - ContextMenu must close on Escape, on an outside click, on window blur
+    and on scroll. Clamp its position so it never renders off-screen near
+    the right or bottom edge.
+  - Filtering must not change the selection. If the selected host is
+    filtered out, the workspace keeps showing it.
+  - Do not use a virtualized list library yet. Measure with the 2000-host
+    fixture first (copy ~/fastssh-testenv/big/hosts.json into the sandbox
+    config). If the first render takes more than 200 ms, record it as a P2
+    enhancement.
+
+Acceptance:
+  - Load the legacy fixture by copying the legacy/*.json files into the
+    sandbox config dir. The groups show Local first, then Broken, Lab and
+    Unreachable (natural order). In Lab, item2 comes before item10.
+    "my server" shows as "my-server".
+  - The filter "item" shows only Lab. Clearing it restores all groups.
+  - Collapse "Lab" and restart: it is still collapsed.
+  - The Hosts/Accounts toggle shows lab-key on the Accounts side.
+  - Drag the splitter to 400 px and restart: the width is 400. Dragging to
+    50 px clamps to 160.
+  - Toggling useDarkTheme by hand in settings.json switches the palette
+    on the next launch. Take a screenshot of both themes.
+  - With the 2000-host fixture, typing in the filter has no visible lag.
+    Record the timing.
+
+--------------------------------------------------------------------------------
+STAGE 3: CONNECTION AND ACCOUNT EDITORS
+--------------------------------------------------------------------------------
+Goal: Users can add, edit, duplicate and remove hosts and accounts with
+validation. Changes are saved at once, and account edits propagate to linked
+hosts.
+
+Tasks:
+3.1  lib/hostUtils.ts: normalizeName (trim, whitespace runs become "-"),
+     validateHost(draft, allHosts, editingId) returns a list of
+     { field, messageKey }. Rules: the name is required and unique
+     (case-sensitive, like ssh) and may not contain * ? ! # , or quotes.
+     The host is always required. The port must be 1-65535. Every tunnel must be
+     valid. resolveCredentials(host, accounts) returns the account's
+     username, password and identity_file when host.account matches an
+     existing account. Otherwise it returns the host's own values.
+3.2  lib/tunnels.ts: parseTunnels("-L 8080:localhost:80,-R 9000:db:5432")
+     returns TunnelRule[], and serializeTunnels does the reverse. It
+     accepts "-L8080:..." (no space) and an IPv6 destination
+     "[::1]". Invalid parts are reported, never dropped silently. Test the
+     round trip.
+3.3  lib/sshConfigBlock.ts: syncBlock(block, fields) rewrites ONLY the
+     managed lines (Host, HostName, User, Port, IdentityFile) and keeps
+     every other line, including comments, in place. A missing managed
+     line is inserted after "Host". An empty value removes the line
+     (except Host). Keys match case-insensitively. Tunnels become
+     LocalForward/RemoteForward lines (managed as a group). See the
+     reference. (R7 preview, used in the editor now)
+3.4  ConnectionEditor (opens inside Editors/EditorOverlay.tsx, an
+     absolute overlay over the workspace driven by uiSlice.editor. It
+     NEVER replaces or unmounts the notebooks, see Stage 4). Sections:
+     Basic (Name, Group with a datalist of existing groups, Host, Port,
+     Account select or "none", then Username, Password with a show
+     toggle and Identity File with a Browse button when no account is
+     selected), Appearance (Color: a color input plus a "use default"
+     checkbox; Font: a text field like "Ubuntu Mono 13" plus "use
+     default"), Tunnels (TunnelsEditor: rows of type/sourcePort/
+     destinationHost/destinationPort with add/remove), and Advanced (Extra
+     arguments, plus a live ssh_config textarea). Buttons: Save, Cancel,
+     and Delete in edit mode.
+3.5  Browse uses `open({ multiple: false, directory: false, defaultPath:
+     '~/.ssh' })` from @tauri-apps/plugin-dialog. Cancel returns null, so
+     leave the field unchanged. The text field stays editable. It is the
+     fallback for tests and for broken portals.
+3.6  ErrorRevealer: an inline red banner at the top of the editor listing
+     all validation errors. Each field also gets aria-invalid and a
+     message below it. Save stays enabled. Clicking it reveals the errors
+     and focuses the first invalid field.
+3.7  Duplicate: copy all fields with a new id. The name becomes
+     "<name>-copy", then "-copy-2" and so on until it is unique. The
+     editor opens in add mode.
+3.8  Remove: a ConfirmDialog says "Remove <name>?". If the host has open
+     tabs (Stage 4 onward), it adds "N open tabs will be closed". Removing
+     a host clears the selection.
+3.9  AccountEditor: Name, Username, Password and Identity File. On save,
+     every host whose account equals the OLD name gets account = the new
+     name, and its username, password and identity_file are copied from
+     the account (legacy compatibility, R2). Save hosts and accounts.
+     Deleting an account used by N hosts asks "N hosts use this account.
+     They will keep the current credentials and be unlinked."
+3.10 ModalHost + modalSlice: a queue (array) of modal descriptors.
+     ModalHost renders only the first one. Confirm resolves a promise.
+     Focus moves into the modal (trap Tab) and returns to the opener when
+     it closes. Escape means Cancel.
+3.11 Wire the header button "New Connection", the landing buttons Edit
+     and Remove, and the context menu actions Edit, Duplicate and Remove.
+3.12 Save flow: librarySlice.saveHosts(next) sets the state optimistically,
+     then calls save_hosts. On error it restores the previous array and
+     shows an error toast. Use a save token: only the latest save may
+     restore the previous state.
+3.13 Tests: hostUtils, tunnels, sshConfigBlock (unit), and the editors with
+     a mocked IPC (validation messages, duplicate naming, account
+     propagation). e2e library.e2e.ts: add a host, see it in the sidebar,
+     edit its port, duplicate it, remove it.
+
+Reference: src/lib/sshConfigBlock.ts (excerpt)
+```ts
+export interface BlockFields {
+  name: string; host: string; port: number; username: string; identityFile: string;
+  forwards: string[]; // ["LocalForward 8080 localhost:80", ...]
+}
+const MANAGED = ['host', 'hostname', 'user', 'port', 'identityfile'] as const;
+const FORWARD = /^\s*(localforward|remoteforward)\b/i;
+const keyOf = (line: string) => line.trim().split(/[\s=]+/, 1)[0]?.toLowerCase() ?? '';
+const quote = (v: string) => (/\s/.test(v) ? `"${v}"` : v);
+
+export function syncBlock(block: string, f: BlockFields): string {
+  const managed: Record<string, string> = {
+    host: `Host ${f.name}`,
+    hostname: f.host ? `    HostName ${f.host}` : '',
+    user: f.username ? `    User ${f.username}` : '',
+    port: `    Port ${f.port}`,
+    identityfile: f.identityFile ? `    IdentityFile ${quote(f.identityFile)}` : '',
+  };
+  const others = block.split('\n')
+    .filter((l) => !(MANAGED as readonly string[]).includes(keyOf(l)) && !FORWARD.test(l))
+    .filter((l, i, arr) => !(l.trim() === '' && i === arr.length - 1));
+  const head = MANAGED.map((k) => managed[k]).filter(Boolean);
+  const fwd = f.forwards.map((x) => `    ${x}`);
+  return [...head, ...fwd, ...others].join('\n');
+}
+```
+Note: this rewrites the managed lines into a fixed order at the top. That
+is acceptable and predictable. Write a test asserting that a user line
+like "    ForwardAgent yes" survives 10 edits of the name field unchanged.
+
+Notes:
+  - Passwords are stored in plain text unless encryption is on (Stage 10).
+    Show the one-line hint "Passwords are stored unencrypted. Enable
+    encryption in Preferences." under the password field while
+    encryptData is false.
+  - Editing a host that has open tabs does not touch the running
+    sessions. The changes apply to new tabs. Say so in a small note in
+    the editor.
+  - Rapid double-clicks on Save: disable the button while the save is in
+    flight, so two writes don't race.
+  - Renaming a host must update selectedHostId-based state only by id,
+    never by name. Tabs are keyed by host id (Stage 4).
+
+Acceptance:
+  - Add "web 1" (host 127.0.0.1, port 2222): it is saved as "web-1" and
+    appears in its group. hosts.json shows "port":"2222" and the
+    "identity-file" key.
+  - Add a second "web-1": the banner says "Name is already taken" and
+    nothing is saved. Port 70000 gives a port error. Tunnel "-L abc"
+    gives a tunnel error.
+  - Duplicate web-1: "web-1-copy". Duplicate it again: "web-1-copy-2".
+  - Edit account lab-key's username to "keyuser2": item2's
+    resolveCredentials gives keyuser2. hosts.json for item2 has username
+    keyuser2. Rename lab-key to lab: item2.account is "lab".
+  - Delete an account in use: the confirm text has the right count.
+    After confirming, the hosts keep their credentials and account is "".
+  - Type in Name/Host/Port: the ssh_config preview updates live. A
+    hand-added "ForwardAgent yes" line survives the edits.
+  - Make the config dir read-only (chmod 500 on the SANDBOX dir), then
+    save: an error toast with the OS error appears, and the sidebar
+    reverts. Restore the mode afterwards.
+  - Browse opens the system file dialog. This is checked once by
+    screenshot, and the human confirms that picking a file fills the
+    field. Typing a path works under e2e.
+
+--------------------------------------------------------------------------------
+STAGE 4: PTY MANAGER, LOCAL SHELL AND HOST NOTEBOOKS
+--------------------------------------------------------------------------------
+Goal: Connecting to Localhost opens real terminal tabs. Each host has its own
+notebook. Switching hosts keeps every terminal alive with its scrollback.
+Resizing works.
+
+Tasks:
+4.1  utf8_chunker.rs: Utf8Chunker::push(&[u8]) -> String keeps an
+     incomplete trailing sequence (at most 3 bytes) for the next push.
+     Invalid bytes become U+FFFD. Test a split 4-byte emoji, a split
+     Cyrillic letter, invalid bytes, and an empty push.
+4.2  pty_manager.rs: PtyManager { sessions: Mutex<HashMap<String,
+     Session>> } with spawn(app, session_id, spec, cols, rows), write(id,
+     data), resize(id, cols, rows), kill(id) and kill_all(). spec is
+     LocalShell or Ssh(String). The command line is built in Stage 5.
+     Reader thread: read 16 KiB chunks, decode, then
+     emit("pty-output-<id>", text). Wait thread: child.wait(), then
+     emit("pty-exit-<id>", code), then remove the session. Use
+     clone_killer() for kill so wait() never holds the lock.
+4.3  commands/session.rs: spawn_session(session_id, host, sync_ssh_config,
+     cols, rows), write_pty, resize_pty and kill_session. In this stage
+     only host.local == true is accepted. Others return
+     AppError "not yet supported".
+4.4  lib.rs: .manage(PtyManager), and in the run callback on
+     RunEvent::Exit call kill_all().
+4.5  terminal/terminalRegistry.ts: a Map<tabId, Entry>. Entry holds the
+     Terminal plus FitAddon, SearchAddon and WebLinksAddon, `opened`, and
+     a host <div> created once. attach(tabId, container) moves the host
+     div into the container (appendChild). On the first attach it calls
+     term.open(hostDiv). dispose(tabId) disposes the addons, then the
+     terminal, then removes the div. This keeps xterm out of React's
+     lifecycle, so StrictMode double effects and re-parenting never
+     destroy a buffer.
+4.6  terminal/sessionController.ts: openTab(hostId) creates the tab
+     state, then the terminal, then listens for output and exit, and only
+     then calls invoke spawn_session (listeners FIRST, so no early output
+     is lost). After awaiting spawn, check that the tab still exists. If
+     it was closed meanwhile, kill the session. closeTab(tabId): unlisten,
+     kill_session, dispose the terminal, remove the tab. term.onData sends
+     write_pty. term.onResize sends resize_pty.
+4.7  tabsSlice: tabs: Record<tabId, TerminalTab>, tabOrder:
+     Record<hostId, tabId[]>, activeTabByHost: Record<hostId,
+     tabId | null>. TerminalTab = { id, hostId, sessionId, title, unread,
+     loggedIn, exited, exitCode }. Tab titles: the host name, plus " (2)"
+     etc. for later tabs.
+4.8  HostNotebook: a tab bar (title, unread dot slot, close X, and "+") and
+     the body with one TerminalPane per tab. All panes stay mounted, and
+     inactive panes get `hidden`. App renders one HostNotebook for EVERY
+     host that has tabs, always mounted. The selected one gets
+     "flex flex-1" and the others "hidden" (spec 7.1). A selected host with
+     0 tabs shows ConnectionLanding instead. Once a host has 0 tabs, its
+     notebook unmounts, because nothing is left to preserve.
+4.9  TerminalPane: a container div with a ResizeObserver. It calls
+     registry.attach on mount. On a size change it calls fit() ONLY when
+     the container's width and height are > 0. A hidden pane has
+     size 0, and fitting it would send cols=0 to the PTY. When the pane
+     becomes visible, fit and then term.focus().
+4.10 Terminal options from settings and host (R12): fontFamily/fontSize
+     come from fontSpec(host.font) or the settings, background from
+     colors.toHex(host.color) or settings.terminalBackgroundColor, the
+     foreground is picked by contrast, scrollback is -1 -> 50000, and
+     cursorBlink is true. lib/colors.ts and lib/fontSpec.ts get unit tests
+     ("Monospace 11" -> {family:"Monospace", size:11};
+     "rgb(0,43,54)" -> "#002b36"; invalid input -> fallback).
+4.11 Connect paths (R10): the landing Connect button, the "+" button, a
+     double-click on HostRow, Local Shell in the header (selects
+     Localhost and opens a tab only if it has none), Ctrl+Shift+T and
+     Ctrl+Shift+W. Start hooks/useShortcuts.ts with these two keys
+     (Stage 6 completes it). Ignore events with `e.repeat`.
+4.12 Exit handling for local tabs: on pty-exit, close the tab. If it was
+     the last one, the host shows ConnectionLanding.
+4.13 Tab count badge on HostRow (R13 part): the number of tabs for that
+     host. Select it with a narrow selector, so output does not re-render
+     the sidebar.
+4.14 Tests: utf8_chunker and the pty_manager integration test (spawn
+     /bin/sh, write "echo hi\n", read until "hi", kill, and expect an exit
+     event). Use a test AppHandle from tauri::test::mock_app(), or
+     abstract the emitter behind a trait so tests capture events in a
+     Vec. Unit test the tabsSlice reducers. e2e terminal.e2e.ts: open 2
+     Localhost tabs, type `echo $TERM` and read "xterm-256color" back
+     with registry.getText (see Notes).
+
+Reference: src-tauri/src/pty_manager.rs (core of spawn)
+```rust
+use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
+use std::{collections::HashMap, io::{Read, Write}, sync::{Arc, Mutex}};
+use tauri::{AppHandle, Emitter};
+use crate::{env_sanitize, utf8_chunker::Utf8Chunker};
+
+pub enum SpawnSpec { LocalShell, Ssh(String) }
+
+struct Session {
+    writer: Box<dyn Write + Send>,
+    master: Box<dyn MasterPty + Send>,
+    killer: Box<dyn ChildKiller + Send + Sync>,
+}
+#[derive(Default)]
+pub struct PtyManager { sessions: Arc<Mutex<HashMap<String, Session>>> }
+
+impl PtyManager {
+    pub fn spawn(&self, app: AppHandle, id: String, spec: SpawnSpec, cols: u16, rows: u16) -> Result<(), String> {
+        let pair = native_pty_system()
+            .openpty(PtySize { rows: rows.max(1), cols: cols.max(2), pixel_width: 0, pixel_height: 0 })
+            .map_err(|e| e.to_string())?;
+        let env = env_sanitize::clean_env();
+        let shell = match spec {
+            SpawnSpec::LocalShell => env.get("SHELL").cloned().unwrap_or_else(|| "/bin/sh".into()),
+            SpawnSpec::Ssh(_) => "/bin/sh".into(),
+        };
+        let mut cmd = CommandBuilder::new(&shell);
+        env_sanitize::sanitize_pty_command(&mut cmd);           // env_clear + clean env FIRST
+        if let Some(home) = env.get("HOME") { cmd.cwd(home); }
+        let mut child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+        drop(pair.slave);                                       // else reader never sees EOF
+        let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
+        let mut writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+        if let SpawnSpec::Ssh(line) = &spec {
+            writer.write_all(format!(" exec {line}\n").as_bytes()).map_err(|e| e.to_string())?;
+        }
+        let killer = child.clone_killer();
+        self.sessions.lock().unwrap().insert(id.clone(), Session { writer, master: pair.master, killer });
+
+        let (app_r, id_r) = (app.clone(), id.clone());
+        std::thread::spawn(move || {
+            let (mut buf, mut dec) = ([0u8; 16384], Utf8Chunker::default());
+            loop {
+                match reader.read(&mut buf) {
+                    Ok(0) | Err(_) => break,                    // EIO on Linux when child exits
+                    Ok(n) => { let text = dec.push(&buf[..n]);
+                               if !text.is_empty() { let _ = app_r.emit(&format!("pty-output-{id_r}"), text); } }
+                }
+            }
+        });
+        let sessions = self.sessions.clone();
+        std::thread::spawn(move || {
+            let code = child.wait().map(|s| s.exit_code() as i32).unwrap_or(-1);
+            sessions.lock().unwrap().remove(&id);
+            let _ = app.emit(&format!("pty-exit-{id}"), code);
+        });
+        Ok(())
+    }
+
+    pub fn kill(&self, id: &str) {
+        if let Some(mut s) = self.sessions.lock().unwrap().remove(id) { let _ = s.killer.kill(); }
+    }
+    // write(): lock, writer.write_all + flush. resize(): master.resize(PtySize{..}) with cols>=2, rows>=1.
+}
+```
+Note: the exit event can arrive before the last output chunk has been
+emitted, because the threads race. In sessionController, on pty-exit,
+wait 50 ms (setTimeout) before closing the tab, so the final output (e.g.
+"logout") is processed.
+
+Reference: src/terminal/terminalRegistry.ts (excerpt)
+```ts
+import { Terminal, type ITerminalOptions } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { SearchAddon } from '@xterm/addon-search';
+import '@xterm/xterm/css/xterm.css';
+
+interface Entry { term: Terminal; fit: FitAddon; search: SearchAddon; host: HTMLDivElement; opened: boolean }
+const entries = new Map<string, Entry>();
+
+export function createTerminal(tabId: string, opts: ITerminalOptions): Entry {
+  const existing = entries.get(tabId);
+  if (existing) return existing;                 // idempotent: StrictMode-safe
+  const term = new Terminal({ allowProposedApi: true, ...opts });
+  const fit = new FitAddon(); const search = new SearchAddon();
+  term.loadAddon(fit); term.loadAddon(search);
+  const host = document.createElement('div');
+  host.className = 'h-full w-full';
+  const e = { term, fit, search, host, opened: false };
+  entries.set(tabId, e);
+  return e;
+}
+
+export function attach(tabId: string, container: HTMLElement): void {
+  const e = entries.get(tabId);
+  if (!e) return;
+  if (e.host.parentElement !== container) container.appendChild(e.host);
+  if (!e.opened) { e.term.open(e.host); e.opened = true; }
+}
+
+export function safeFit(tabId: string): void {
+  const e = entries.get(tabId);
+  if (!e || !e.opened || e.host.clientWidth === 0 || e.host.clientHeight === 0) return;
+  e.fit.fit();
+}
+
+export function dispose(tabId: string): void {
+  const e = entries.get(tabId);
+  if (!e) return;
+  entries.delete(tabId);
+  e.term.dispose(); e.host.remove();             // term.dispose also disposes loaded addons
+}
+
+/** Test helper: plain text of the active buffer (used by e2e via window hook in DEBUG only). */
+export function getText(tabId: string): string {
+  const b = entries.get(tabId)?.term.buffer.active;
+  if (!b) return '';
+  const out: string[] = [];
+  for (let i = 0; i < b.length; i++) out.push(b.getLine(i)?.translateToString(true) ?? '');
+  return out.join('\n').trimEnd();
+}
+export const getEntry = (tabId: string) => entries.get(tabId);
+```
+Notes:
+  - E2E can't read a canvas, but the DOM renderer does render rows as
+    text. For reliable asserts, expose `window.__fastsshTest =
+    { getText, activeTabId }` ONLY when `import.meta.env.DEV` or
+    `import.meta.env.MODE === 'e2e'`. Build the e2e binary with
+    `--debug`, where Vite's mode is "development". Never ship this hook in
+    release (Stage 12 checks with a grep of dist/).
+  - React StrictMode: effects run twice in dev. createTerminal is
+    idempotent, and openTab is called from user actions, never from an
+    effect, so no double spawn happens.
+  - Output volume: `cat big.txt` (68 MB) must not freeze the UI. xterm
+    buffers writes. If it freezes, batch in the controller: collect
+    chunks and call term.write once per requestAnimationFrame. Record the
+    measured behaviour.
+  - Do not call fit() in a loop from ResizeObserver without a guard.
+    Compare the new cols/rows with the previous ones before calling
+    resize_pty.
+
+Acceptance:
+  - Double-click Localhost: a tab opens with a working shell in $HOME.
+    `echo $TERM $COLORTERM` prints "xterm-256color truecolor". `env | grep
+    -c APPDIR` prints 0.
+  - Open 3 tabs. Run `seq 1 3000` in tab 2. Switch to item10 (landing),
+    then back: tab 2 still has the full scrollback. Check by scrolling
+    up, with a screenshot.
+  - Ctrl+Shift+T opens a tab and Ctrl+Shift+W closes the focused one.
+    Holding Ctrl+Shift+T for 2 s opens exactly 1 tab.
+  - Type `exit`: the tab closes. Close the last tab: ConnectionLanding
+    appears.
+  - Resize the window: `tput cols` matches the visible width. Hidden tabs
+    never get cols=0 (log resize_pty calls at debug level and check).
+  - Close the app with 3 tabs open: no orphan shell remains.
+    Check with `pgrep -P <app pid>` before and `pgrep -f fastssh` after.
+  - `cat ~/fastssh-testenv/sshd/big.txt` in a local tab: the UI stays
+    responsive, and Ctrl+C stops it within 2 s.
+  - The HostRow badge shows 3, then 2 after a tab is closed.
+
+--------------------------------------------------------------------------------
+STAGE 5: SSH CONNECTIONS AND PROMPT HEURISTICS
+--------------------------------------------------------------------------------
+Goal: Connecting to a remote host runs ssh in the tab. The password is sent
+once, the fingerprint and error modals work, a clean logout closes the tab,
+and Retry reconnects in the same tab.
+
+Tasks:
+5.1  ssh_command.rs: build_ssh_line(host: &Host, creds: &Creds, sync:
+     bool, sandbox: Option<&Path>) -> Result<String, String>.
+     shell_quote(s) wraps s in single quotes and escapes ' as '\''. It
+     leaves s bare when s matches [A-Za-z0-9@%_+=:,./-]+. (R9)
+       standard: ssh <q(user)@q(host)> -p <port> [-i q(identity)]
+                 [-L q(src:dst:dport)]... [-R ...]... [extra_arguments]
+                 Omit "user@" when the username is empty, so ssh uses
+                 the local user.
+       sync:     ssh <q(name)> [extra_arguments]
+       sandbox:  prefix -F q(<dir>/config) -o
+                 UserKnownHostsFile=q(<dir>/known_hosts) right after "ssh".
+     extra_arguments are appended VERBATIM (by design, like EasySSH). Put a
+     note in the editor tooltip that they are interpreted by /bin/sh.
+     Expand a leading "~/" in the identity path in Rust, because quoting
+     stops the shell from expanding it.
+5.2  The frontend resolves the credentials (resolveCredentials) and passes
+     a resolved Host copy to spawn_session. Rust trusts this copy and
+     re-validates the port (1-65535) and that the host is non-empty.
+5.3  spawn_session now accepts remote hosts: SpawnSpec::Ssh(line).
+5.4  terminal/promptWatcher.ts: a pure class (reference below). It is fed
+     every output chunk of a remote tab. sessionController turns its
+     events into actions:
+       send-password -> write_pty(password + "\n")       (R11)
+       fingerprint   -> enqueue FingerprintModal(tabId, last 3 lines)
+       error         -> enqueue ConnectionErrorModal(tabId, message)
+       logged-in     -> tab.loggedIn = true
+       logout        -> mark it; the close happens on pty-exit
+5.5  pty-exit for a remote tab: if loggedIn and the code is 0 or 255 after
+     "logout"/"Connection to X closed.", close the tab (last tab ->
+     landing). If not logged in, keep the tab and write a dim line
+     "[Process exited with code N]". If no error modal is queued for this
+     tab, enqueue ConnectionErrorModal with a generic message.
+5.6  FingerprintModal: shows the lines containing the key type and the
+     fingerprint, plus the buttons Yes (writes "yes\n") and No (writes
+     "no\n"). If the tab is closed while the modal is queued, drop it.
+5.7  ConnectionErrorModal: the message (mapped to a friendly text in
+     strings.ts, with the raw line shown below it) and the buttons Retry
+     and Close. Retry: unlisten the old session, kill_session(old), clear
+     the terminal (term.reset()), new sessionId, listeners, spawn. Close:
+     closeTab. Multiple tabs failing at once queue their modals, so one
+     modal appears at a time.
+5.8  Tests: ssh_command (quoting of spaces, quotes, $, ~ expansion, empty
+     user, IPv6 host, tunnels, sync and sandbox prefixes). promptWatcher
+     gets a table of chunk sequences, including a prompt split across
+     chunks and ANSI-colored prompts. e2e ssh.e2e.ts against the docker
+     sshd (see Acceptance).
+
+Reference: src/terminal/promptWatcher.ts
+```ts
+export type WatchEvent =
+  | { type: 'send-password' } | { type: 'fingerprint'; text: string }
+  | { type: 'error'; kind: ErrorKind; line: string } | { type: 'logged-in' } | { type: 'logout' };
+export type ErrorKind = 'refused' | 'unreachable' | 'timeout' | 'closed' | 'auth' | 'dns' | 'hostkey';
+
+// eslint-disable-next-line no-control-regex
+const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][A-Za-z0-9]|\r/g;
+const ERRORS: Array<[RegExp, ErrorKind, 'preLogin' | 'always']> = [
+  [/Connection refused/i, 'refused', 'preLogin'],
+  [/No route to host/i, 'unreachable', 'preLogin'],
+  [/Could not resolve hostname/i, 'dns', 'preLogin'],        // extension, recorded
+  [/REMOTE HOST IDENTIFICATION HAS CHANGED/i, 'hostkey', 'preLogin'],
+  [/Permission denied, please try again\./i, 'auth', 'preLogin'],
+  [/Permission denied \(/i, 'auth', 'preLogin'],
+  [/Connection timed out|Operation timed out/i, 'timeout', 'always'],
+  [/Broken pipe|Connection reset/i, 'closed', 'always'],
+  [/Connection closed by/i, 'closed', 'preLogin'],
+];
+const PROMPT = /(:~[$#]|\]\$|\]#)\s*$/;
+const LOGIN_HINT = /(^|\n)(Last login:|Welcome to )/;
+
+export class PromptWatcher {
+  private tail = '';
+  passwordSent = false;
+  loggedIn = false;
+  constructor(private readonly hasPassword: boolean) {}
+
+  feed(chunk: string): WatchEvent[] {
+    const out: WatchEvent[] = [];
+    this.tail = (this.tail + chunk.replace(ANSI, '')).slice(-2048);
+    for (const [re, kind, when] of ERRORS) {
+      if ((when === 'always' || !this.loggedIn) && re.test(this.tail)) {
+        const line = this.tail.split('\n').find((l) => re.test(l)) ?? '';
+        out.push({ type: 'error', kind, line: line.trim() });
+        this.tail = '';
+        return out;                                   // one event per occurrence
+      }
+    }
+    if (!this.loggedIn && /\(yes\/no/i.test(this.tail)) {
+      out.push({ type: 'fingerprint', text: this.tail.split('\n').slice(-4).join('\n') });
+      this.tail = '';
+      return out;
+    }
+    // Safer than spec: only before login, so a later sudo prompt never gets it.
+    if (!this.loggedIn && !this.passwordSent && this.hasPassword && /password:\s*$/i.test(this.tail)) {
+      this.passwordSent = true;
+      out.push({ type: 'send-password' });
+      this.tail = '';
+    }
+    if (!this.loggedIn && (PROMPT.test(this.tail) || LOGIN_HINT.test(this.tail))) {
+      this.loggedIn = true;
+      out.push({ type: 'logged-in' });
+      this.tail = '';
+    }
+    if (this.loggedIn && /(^|\n)logout\s*$/.test(this.tail)) { out.push({ type: 'logout' }); this.tail = ''; }
+    return out;
+  }
+}
+```
+Deviations to record: password injection is limited to before login. The
+DNS and host-key-changed patterns were added. "Connection closed" only
+counts before login, because after login it is the normal goodbye.
+
+Notes:
+  - The password crosses IPC as plain text inside the resolved Host. That
+    is acceptable for a local process. NEVER log the Host object. Add a
+    Debug impl for Host that redacts the password, and a test for it.
+  - If the password is wrong, ssh prompts again. passwordSent is already
+    true, so the user types the next attempt. On the third failure, ssh
+    prints "Permission denied (...)" and the modal appears.
+  - Use the dim exit line instead of an alert(), because the tab must keep
+    the error output visible for diagnosis.
+  - The fingerprint question can include "[fingerprint]". Answering "yes"
+    covers both forms.
+
+Acceptance (container fastssh-sshd on 127.0.0.1:2222, legacy fixtures
+loaded, sandbox known_hosts empty):
+  - Connect item10 (tester + password): the FingerprintModal appears.
+    Click Yes. The password is sent automatically ONCE, and a prompt
+    "tester@<id>:~$" appears. `whoami` prints tester. The sandbox
+    known_hosts now has 1 line, and ~/.ssh/known_hosts is unchanged.
+  - Connect item10 again: no fingerprint modal this time.
+  - Run `sudo -k; sudo true` in that tab: the password is NOT injected
+    (the prompt waits).
+  - Type `exit`: the tab closes. It was the last one, so the landing
+    appears.
+  - item2 (account lab-key, key auth): logs in with no password and no
+    modal.
+  - Сервер-1 (port 2299): the error modal "Connection refused". Retry
+    shows it again, with ONE modal and not two. Close removes the tab.
+  - "my-server" (192.0.2.10, ConnectTimeout=5): the timeout modal appears
+    within about 6 s.
+  - Change item10's password to a wrong value: the auto-send happens
+    once, ssh re-prompts, and the modal appears after the final failure.
+  - `docker stop fastssh-sshd` while logged in: the "closed"/"Broken pipe"
+    modal (or a dim exit line) appears and the app does not crash. Then
+    `docker start fastssh-sshd`.
+  - Retry while the old session is still printing output: no output from
+    the old session appears in the new one.
+  - ps shows "ssh tester@127.0.0.1 -p 2222 ..." and NO password in any
+    argv: `ps -eo args | grep -c fastssh-test-pass` must be 0 (the grep
+    itself excluded).
+
+--------------------------------------------------------------------------------
+STAGE 6: TERMINAL TOOLS AND SHORTCUT MATRIX
+--------------------------------------------------------------------------------
+Goal: The search toolbar, Alt+C/Alt+Up, unread badges, the context menu,
+clipboard and every shortcut in the spec matrix work in all tabs.
+
+Tasks:
+6.1  Key routing: on every terminal, call
+     term.attachCustomKeyEventHandler(e => !isAppShortcut(e)). An
+     isAppShortcut() in useShortcuts.ts lists every shortcut in the
+     matrix. Returning false makes xterm ignore the key so that the window
+     handler gets it. Without this, Alt+C reaches the shell as ESC c and
+     Ctrl+Shift+C as ^C. (R17)
+6.2  Complete useShortcuts (spec section 9): Ctrl+Q (Stage 8 adds the
+     quit flow; for now call quit_app), Ctrl+Shift+T/W, Ctrl+Shift+Left/
+     Right (previous/next tab, wrapping), Ctrl+Shift+C/V/A, Ctrl+Shift+F,
+     Ctrl+G and Ctrl+Shift+G (only while search is open), Ctrl+Shift+E
+     (Stage 7 wires the browser; until then show a toast "Coming soon"),
+     Alt+C, Alt+Up and F11 (setFullscreen(!isFullscreen)). Match on
+     e.code ("KeyT") and not e.key. With Shift held, e.key is "T", and
+     keyboard layouts differ. Ignore e.repeat for actions that open or
+     close things.
+6.3  Clipboard (R12): copy = term.getSelection() -> writeText (do nothing
+     if the selection is empty). Paste = readText() -> term.paste(text),
+     which handles bracketed paste. Select all = term.selectAll().
+6.4  Context menu on the terminal (right-click): Copy, Paste, Select All,
+     Search, Copy Last Output, Show in File Browser (remote only, wired in
+     Stage 7) and Close Tab.
+6.5  SearchToolbar (R14): a text input, Next, Previous, a Cyclic toggle
+     (default on) and a Case-insensitive toggle (default on). It operates
+     on the active tab's SearchAddon. It uses findNext/findPrevious with
+     { caseSensitive: !insensitive, decorations: {...} } so that
+     onDidChangeResults reports resultIndex and resultCount. Show "3 / 12".
+     Cyclic OFF: if Next would wrap from the last result to the first,
+     call findPrevious to stay on the last one and show "No more matches".
+     Escape closes the toolbar, clears the decorations and focuses the
+     terminal.
+6.6  terminal/lastCommand.ts (R15): on term.onData containing "\r",
+     dispose the previous marker and register term.registerMarker(0).
+     Alt+Up: scrollToLine(marker.line), or a toast "No command yet" if
+     there is no marker or it is disposed (trimmed out of the scrollback).
+     Alt+C: copy the lines from marker.line+1 to cursorAbsRow-1
+     (translateToString(true), joined with "\n", trailing blank lines
+     removed). cursorAbsRow = buffer.active.baseY + buffer.active.cursorY.
+     Then show the toast "Copied N lines". If there is no output, show
+     "Nothing to copy".
+6.7  Unread (R13): on output, set tab.unread = true only if it is
+     currently false (no per-chunk store writes) AND the tab is not the
+     active tab of the selected host, or the window is not focused.
+     Clear it when the tab becomes active while its host is selected and
+     the window is focused (listen to window focus). The HostRow dot
+     shows when any of its tabs is unread.
+6.8  Bell (R12): term.onBell. If settings.audibleBell is true, play a
+     short WebAudio beep (an oscillator, 880 Hz for 80 ms; no audio
+     file). Throttle it to one per 200 ms.
+6.9  Web links: load WebLinksAddon with a handler that calls
+     ipc.openUrl(uri). The open_url command is added in Stage 7; until
+     then log it. A plain window.open does nothing in Tauri.
+6.10 Tests: isAppShortcut table tests, lastCommand with a fake buffer, the
+     unread reducer, and search toolbar state. e2e tools.e2e.ts: run
+     `printf 'a\nb\nc\n'`, press Alt+C, and read the clipboard through a
+     test hook (readText) to get "a\nb\nc". Run search with "b" and see
+     "1 / 1".
+
+Notes:
+  - Ctrl+Shift+V with an empty clipboard or non-text content: do nothing,
+    with no error toast.
+  - Many terminals fire onData for each key. Do not store per keystroke.
+    The marker approach is O(1).
+  - Desktop global shortcuts (GNOME or KDE) may take some keys (for
+    example Ctrl+Alt+T, or Super combinations). Our
+    matrix does not use those. If a key never reaches the webview,
+    record it as "intercepted by the desktop" and do not hack around it.
+
+Acceptance:
+  - Every row of the spec's shortcut table is tested (e2e or manually with
+    a screenshot) and listed with its result in the handoff.
+  - In vim inside a local tab, Ctrl+Shift+C copies the selection and does
+    not send ^C. Alt+C does not insert "c" into the shell.
+  - Search for "seq" output with Cyclic off: Next at the last match stays
+    there and shows "No more matches". With Case-insensitive off, "ECHO"
+    does not match "echo".
+  - Alt+Up after `seq 1 500` scrolls so that the command line is at the
+    top.
+  - Output in a background tab shows a dot on the tab and the HostRow.
+    Focusing the tab clears both. 10,000 lines of background output cause
+    exactly one store update for unread (count it in a dev log).
+  - F11 toggles fullscreen. useWindowState does not save the fullscreen
+    size.
+
+--------------------------------------------------------------------------------
+STAGE 7: BOOKMARKS, SFTP FILE BROWSER AND LINK OPENING
+--------------------------------------------------------------------------------
+Goal: Bookmarks can be managed and run in the active terminal. "Show in File
+Browser" opens the remote host in the desktop's file manager (Nautilus on
+GNOME, Dolphin on KDE). Links
+in the terminal open in the default browser.
+
+Tasks:
+7.1  BookmarksPopover (R3): a search field filtering on name and command,
+     a list with Run and Delete per row, and an Add form (name and command,
+     both required, name unique). Run writes command + "\n" to the active
+     tab of the selected host. With no active tab, Run is disabled with
+     the tooltip "Open a terminal first". Delete asks for confirmation.
+     Save through save_bookmarks. Escape and an outside click close the
+     popover. Focus returns to the header button.
+7.2  file_browser.rs (R16): open_sftp(user, host, port). Build the URL with
+     percent-encoding of the user and brackets for IPv6. Omit "user@" when
+     it is empty. Try in order: xdg-open URL (wait up to 10 s in a
+     background thread; success means exit code 0); if
+     XDG_CURRENT_DESKTOP contains "KDE": kioclient exec URL, then
+     dolphin URL (spawn without waiting, then reap it in a thread). Every
+     Command goes through sanitize_std_command. Return Ok(method used) or
+     AppError with the URL in the message.
+7.3  open_url(url): allow only http:// and https://. Use xdg-open (no
+     KDE fallback needed, xdg-open handles it) and the sanitized env.
+7.4  commands/system.rs: open_sftp_file_browser(username, host, port) and
+     open_url. Wire Ctrl+Shift+E and the context menu item. For a host in
+     sync mode, use the host's real host/port/user, not the alias. For
+     Localhost the item is disabled.
+7.5  On failure: a toast with the URL and a Copy button (Section 2).
+7.6  Tests: URL building (IPv6, encoded user, empty user) and the
+     scheme check in open_url (reject file:, javascript:, ssh:). The
+     launcher order uses an injectable "runner" closure in tests, so no
+     real program starts. e2e bookmarks.e2e.ts: add the bookmark "hello"
+     -> `echo bookmark-ok`, run it in a Localhost tab, and see the output.
+
+Reference: src-tauri/src/file_browser.rs (fallback chain)
+```rust
+use std::{process::{Command, Stdio}, time::Duration};
+use crate::env_sanitize::sanitize_std_command;
+
+fn run_wait(prog: &str, url: &str, timeout: Duration) -> bool {
+    let mut c = Command::new(prog);
+    sanitize_std_command(&mut c);
+    c.arg(url).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    let Ok(mut child) = c.spawn() else { return false };
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(st)) => return st.success(),
+            Ok(None) if std::time::Instant::now() < deadline => std::thread::sleep(Duration::from_millis(100)),
+            _ => { std::thread::spawn(move || { let _ = child.wait(); }); return true; } // still running = launched
+        }
+    }
+}
+
+pub fn open_sftp(url: &str, desktop: &str) -> Result<&'static str, String> {
+    if run_wait("xdg-open", url, Duration::from_secs(10)) { return Ok("xdg-open"); }
+    if desktop.to_uppercase().contains("KDE") {
+        let mut k = Command::new("kioclient"); sanitize_std_command(&mut k);
+        if k.args(["exec", url]).status().map(|s| s.success()).unwrap_or(false) { return Ok("kioclient"); }
+        let mut d = Command::new("dolphin"); sanitize_std_command(&mut d);
+        if let Ok(mut ch) = d.arg(url).spawn() { std::thread::spawn(move || { let _ = ch.wait(); }); return Ok("dolphin"); }
+    }
+    Err(format!("Could not open a file browser for {url}"))
+}
+```
+Note: call open_sftp from the command with tokio::task::spawn_blocking,
+because it can block for up to 10 s. Read XDG_CURRENT_DESKTOP from
+env_sanitize::clean_env().
+
+Acceptance:
+  - Add, search, run and delete bookmarks. They persist after a restart.
+    Adding a duplicate name shows an inline error.
+  - Run with no tab: the button is disabled. Run in an ssh tab (item10):
+    the command runs remotely.
+  - Ctrl+Shift+E on an item10 tab opens the desktop's file manager at
+    sftp://tester@127.0.0.1:2222 (GNOME may first ask for the password
+    "fastssh-test-pass" in a GVFS dialog; the human types it, never the
+    agent). Take a screenshot with `tools/screenshot.sh <file> full`,
+    because the file manager is a separate window. The log line shows
+    which method worked.
+  - Simulate failure: create ~/fastssh-testenv/fakebin/xdg-open (a script
+    that runs `exit 1`) and launch with
+    PATH=~/fastssh-testenv/fakebin:$PATH XDG_CURRENT_DESKTOP=NONE
+    ./tools/dev-sandbox.sh debug. The failure toast shows the URL, and Copy
+    puts it on the clipboard.
+  - Clicking https://example.com printed in a terminal opens the default
+    browser. "file:///etc/passwd" printed in a terminal does NOT open.
+  - The other desktop's path (Dolphin/kioclient if this machine runs
+    GNOME; Nautilus/GVFS if it runs KDE): mark it "check on a real device"
+    in the handoff and in docs/MANUAL_CHECKS.md.
+
+--------------------------------------------------------------------------------
+STAGE 8: PREFERENCES, SESSION RESTORE AND QUIT FLOW
+--------------------------------------------------------------------------------
+Goal: Every setting can be changed in a Preferences modal and takes effect
+at once. Open tabs can be restored on the next start. Quitting always saves
+the state.
+
+Tasks:
+8.1  PreferencesModal (R18) with two tabs.
+     General: Hosts folder (text + Browse directory; on change see 8.3),
+     Restore hosts on startup, Sync SSH config (Stage 9 enables it; until
+     then it is disabled with "Coming soon"), Encrypt data (Stage 10, same
+     treatment).
+     Appearance: Dark theme, Terminal background color (color input and
+     a Reset button), Terminal font (family text), Font size (6-48),
+     Scrollback lines (number, or "Unlimited" = -1, shown as "Unlimited
+     (50000)"), Audible bell.
+     Changes apply live through updateSettings. There is no OK/Apply
+     button, just Close.
+8.2  Live application to open terminals: when the font, size, background
+     or scrollback change, iterate the registry and set
+     term.options.<x> = value, then safeFit. Hosts with their own
+     color/font keep their overrides.
+8.3  Changing hostsFolder: if the new folder contains hosts.json (or
+     .gpg), ask "Load the library from <folder>?". Load replaces the
+     current library (open tabs remain). Otherwise ask "Copy the current
+     library to <folder>?". Copy saves there. Cancel reverts the field.
+     Add the Rust command set_hosts_folder(path, mode: "load" | "copy") ->
+     LoadReport.
+8.4  Quit flow (R19), used by Ctrl+Q, the menu Quit and the window close
+     button (extend useCloseHandler): (1) if restoreHosts, collect openedHosts = for each host with
+     tabs (not Localhost), { hostName, tabCount }, otherwise [];
+     (2) await flushSettings(); (3) invoke quit_app, which kills all
+     sessions and calls app.exit(0). A guard flag `quitting` makes a
+     second Ctrl+Q while quitting do nothing.
+8.5  Restore (hooks/useRestoreTabs.ts, runs once): after load, if
+     restoreHosts, then for each openedHosts
+     entry whose hostName exists, open tabCount tabs (max 10 per host, to
+     protect against a corrupt value), staggered by 150 ms per tab so 20
+     ssh handshakes don't all start in the same millisecond. Select the
+     first restored host. Then set openedHosts = [] in settings, so that a
+     crash before the next quit does not restore twice.
+8.6  About dialog: version, the GitHub-style project line, license, and
+     the runtime info from Stage 0B (useful in bug reports).
+8.7  Tests: preference controls call updateSettings with the right
+     values. The scrollback "Unlimited" mapping. The quit flow order (a
+     mock records flush before quit_app). Restore skips missing hosts and
+     clamps tabCount. e2e preferences.e2e.ts: toggle the theme and see
+     the html class change. Enable restore, open 2 tabs on Localhost and
+     1 on item2, press Ctrl+Q, relaunch, and see the same tabs.
+
+Notes:
+  - Restoring ssh tabs triggers the fingerprint and error modals. Their
+    queue (Stage 3) handles many at once.
+  - Localhost tabs are not restored by default. EasySSH did not restore
+    them either. Restoring them is a P3 enhancement.
+  - Re-apply the theme class immediately when the toggle changes. Do not
+    wait for the debounced save.
+
+Acceptance:
+  - Each Appearance setting changes the open terminals at once. Take a
+    screenshot before and after the font size change.
+  - Scrollback 1000: after `seq 1 5000`, scrolling up reaches no further
+    than about 4000.
+  - Hosts folder -> an empty sandbox folder -> Copy: the files appear
+    there with mode 0600. Point back -> Load: the library reloads.
+  - Restore on: quit with 3 tabs on 2 hosts, relaunch, and the same tabs
+    open. Restore off: nothing opens. Remove a host from hosts.json by
+    hand before relaunch: the others still restore and there is no crash.
+  - The close button and Ctrl+Q both write openedHosts. Check
+    settings.json after each.
+  - Pressing Ctrl+Q twice quickly: one quit, no error in the log.
+
+--------------------------------------------------------------------------------
+STAGE 9: TWO-WAY ~/.ssh/config SYNC
+--------------------------------------------------------------------------------
+Goal: Enabling Sync backs up the config, imports its hosts into the
+"SSHConfig" group and from then on writes the config atomically on every
+host save. The user's wildcard, Match and global settings are preserved.
+
+Tasks:
+9.1  ssh_config.rs parser: parse(text) -> Vec<Block>, where Block is
+     { kind: Preamble | Host(Vec<String> patterns) | Match, lines:
+     Vec<String> } and keeps the raw lines verbatim. Keywords are
+     case-insensitive. "Key Value" and "Key=Value" are both accepted.
+     Values may be double-quoted. Comments and blank lines belong to the
+     block they appear in. CRLF is tolerated. (R7)
+9.2  import (fixes the legacy inverted null check): for each Host block,
+     for each pattern that is concrete (no * or ?, does not start with !),
+     produce a Host with name = the pattern, host = HostName or the
+     pattern, port = Port or 22, username = User or "", identity_file =
+     IdentityFile or "" (tilde kept as written), group "SSHConfig",
+     ssh_config = the raw block with its Host line rewritten to this single
+     pattern. Skip names that already exist in the library. Return
+     (new_hosts, skipped_names).
+9.3  export(blocks_of_existing_file, hosts) -> String:
+       1. the preamble (global lines before the first Host/Match),
+          verbatim;
+       2. "# >>> FastSSH managed hosts (edits here are overwritten) >>>";
+       3. one block per non-local host: host.ssh_config if it is
+          non-empty, after syncBlock-equivalent normalisation in Rust
+          (the Host line equals the name; port/user/hostname/identity are
+          refreshed); otherwise generated (spec 8.3) plus the forwards
+          from the tunnels;
+       4. "# <<< FastSSH managed hosts <<<";
+       5. every existing block that is NOT concrete-only (any Host block
+          with a wildcard or negated pattern, every Match block, every
+          line starting with Include), verbatim and in original order.
+     Concrete Host blocks from the old file are dropped, because the
+     library now owns them (they were imported on enable). This is why a
+     host deleted in FastSSH disappears from the config.
+     Rationale for the order: ssh uses the first match, so specific hosts
+     must come before "Host *". Record this as a deviation: the spec
+     regenerates the whole file.
+9.4  Backup on enable (spec 8.1): if <ssh_dir>/config exists, copy it to
+     config.backup. If config.backup already exists, use
+     config.backup.<unix-ts> instead, so the pristine original is never
+     overwritten. Keep the original mode.
+9.5  Write safety: resolve symlinks (fs::canonicalize) and write to the
+     target. Keep the file mode at 0600 (ssh refuses group/world-writable
+     configs). Use atomic_write from storage.rs. Create <ssh_dir> with
+     mode 0700 if it is missing.
+9.6  Commands: enable_ssh_config_sync() -> { backup_path, imported,
+     skipped } does backup + import + save hosts + export and sets
+     syncSshConfig = true in AppState. disable_ssh_config_sync() only
+     turns the flag off and leaves the file alone. save_hosts calls export
+     when the flag is on. An export failure returns a warning in the save
+     result (the hosts save still succeeds) and the UI shows a toast.
+9.7  Preferences: enable the Sync toggle. Turning it on shows a confirm
+     dialog: "FastSSH will manage Host entries in <path>. A backup will be
+     saved to <backup>. Wildcard and Match blocks are kept." On success, a
+     toast "Imported N hosts (M skipped)".
+9.8  Connections in sync mode use `ssh <name>` (Stage 5 builder,
+     sync = true). The sandbox -F prefix still applies under
+     FASTSSH_SSH_DIR.
+9.9  Tests (Rust, fixture tests/fixtures/ssh_config_sample = a copy of the
+     sandbox fixture): parse block counts; import gives web1, web-alias,
+     db10, db2 and bastion, and skips "*.corp", "!negated", Match and
+     "Host *"; the quoted path with a space is unquoted; Key=Value works;
+     export keeps the preamble, the Match block, the Include line and
+     "Host *" (after the managed section); the export -> parse -> import
+     round trip is stable; deleting a host removes its block; the backup
+     never overwrites an existing config.backup; a symlinked config writes
+     through the link. e2e sshconfig.e2e.ts in the sandbox.
+
+Notes:
+  - IMPORTANT: run this stage ONLY against FASTSSH_SSH_DIR. Before writing
+    any ssh code path, check that paths::ssh_dir() returns the sandbox in
+    the test run (log it at info level at startup). Enabling sync against
+    the real ~/.ssh/config needs explicit owner approval and is NOT part
+    of this stage.
+  - "Host web1 web-alias" imports two hosts with identical settings. That
+    matches how ssh treats the aliases.
+  - Never write the password into ssh_config.
+  - Include files are not followed for import (recorded limitation). The
+    hosts in them keep working through the preserved Include line.
+
+Acceptance:
+  - Enable sync in the sandbox: config.backup equals the original
+    byte-for-byte (cmp). The SSHConfig group has web1, web-alias, db10,
+    db2 and bastion. The toast counts are correct.
+  - Enable it a second time (off, then on): config.backup.<ts> is
+    created and config.backup is unchanged.
+  - Edit db2's port to 2200 and save: config has "Port 2200" in db2's
+    block. `ssh -F <sandbox>/config -G db2 | grep -i '^port'` prints 2200.
+    The preamble, Match, Include and "Host *" lines are still present.
+  - Delete db10: its block is gone from config.
+  - Connect web1 in sync mode: ps shows "ssh -F ... web1". It logs in with
+    the key.
+  - chmod 400 on the sandbox config, then save a host: a toast shows the
+    error, and the hosts.json save still succeeded. Restore 600 after.
+  - A symlinked sandbox config (config -> real_config): after a save,
+    config is still a symlink (`test -L`).
+  - ~/.ssh/config of the owner is untouched (same mtime as in Stage 0A).
+
+--------------------------------------------------------------------------------
+STAGE 10: GPG ENCRYPTION AND EASYSSH IMPORT
+--------------------------------------------------------------------------------
+Goal: Users can encrypt their library with a passphrase and unlock it at
+startup. Legacy EasySSH data imports in one click.
+
+Tasks:
+10.1 gpg.rs: GpgRunner { program: PathBuf ("gpg"), gnupg_home:
+     Option<PathBuf> } (the home is set by tests to a temp dir and
+     added AFTER sanitize). encrypt(plain, pass) -> armored bytes.
+     decrypt(path, pass) -> plain bytes. is_available() -> bool
+     (gpg --version). A passphrase containing "\n" or "\r" is rejected
+     before spawning. (R6)
+10.2 storage: when encrypt_data is true and a passphrase is held,
+     save_* writes <name>.json.gpg atomically, then removes <name>.json
+     if it exists (overwrite it with zeros, fsync, unlink; see the notes
+     on SSDs). load_all: if any *.json.gpg exists and no passphrase is
+     held, return locked: true with empty lists. The UI then shows
+     GpgPasswordModal(mode "unlock").
+10.3 Commands: unlock_library(passphrase) -> LoadReport (a wrong
+     passphrase returns AppError code "wrong_passphrase" and nothing is
+     stored). set_encryption(enabled, passphrase?):
+       enable:  requires passphrase + confirmation (equal in the UI,
+                at least 8 characters). Encrypt all three files. Verify
+                each by decrypting it and comparing the bytes BEFORE
+                removing the .json. Then set the flag and save the
+                settings.
+       disable: requires the current passphrase (re-prompt). Write
+                plain .json files, verify, then remove the .gpg files.
+     If any step fails, leave the files as they were and report it.
+10.4 GpgPasswordModal: the modes unlock (one field), set (two fields +
+     a strength hint) and confirm-current. It shows "Wrong passphrase" on
+     that error and keeps the input. Cancel during unlock asks "Quit
+     FastSSH?", because the app can't work without the data.
+10.5 Preferences: enable the Encrypt toggle. Disable it with a tooltip
+     when gpg is unavailable. The Stage 3 hint under the password field
+     disappears when encryption is on.
+10.6 legacy_import.rs (R5): read <legacy_dir>/hosts.json, accounts.json and
+     bookmarks.json with the Stage 1 lenient parsers. Merge by name: an
+     existing name is skipped and counted. A new name gets a new id. Save
+     everything. Return { hosts_added, accounts_added, bookmarks_added,
+     skipped: Vec<String>, warnings }. Never write to legacy_dir.
+10.7 UI: menu item "Import from EasySSH". It is enabled when
+     LoadReport.legacy_available is true. On first start with an empty
+     library and legacy data present, WelcomeView shows a one-click
+     "Import N connections from EasySSH" button. The result toast lists
+     the counts. Warnings go to the log, and the first 3 also go to the
+     toast.
+10.8 Tests: gpg round trip with a temp GNUPGHOME (skip with a printed
+     note if gpg is missing). A wrong passphrase gives WrongPassphrase,
+     even right after a successful decrypt, which proves no agent cache.
+     The fake .gpg fixture gives a clear error, not a panic. A 5 MB
+     payload round trip (pipe deadlock regression). Passphrase with a
+     newline is rejected. Import from the sandbox legacy fixture gives 5
+     hosts (bad-port is imported with port 22 and a warning), 1 account
+     and 2 bookmarks. Importing again adds 0 and skips all.
+
+Reference: src-tauri/src/gpg.rs (encrypt)
+```rust
+use std::{io::Write, process::{Command, Stdio}};
+use crate::env_sanitize::sanitize_std_command;
+
+#[derive(Debug)]
+pub enum GpgError { NotInstalled, WrongPassphrase, BadPassphraseChars, Failed(String) }
+
+const BASE: &[&str] = &["--batch", "--yes", "--quiet", "--pinentry-mode", "loopback",
+                        "--no-symkey-cache", "--passphrase-fd", "0"];
+
+impl GpgRunner {
+    fn command(&self) -> Command {
+        let mut c = Command::new(&self.program);
+        sanitize_std_command(&mut c);                       // env_clear + clean env
+        if let Some(h) = &self.gnupg_home { c.env("GNUPGHOME", h); }
+        c.args(BASE).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        c
+    }
+
+    pub fn encrypt(&self, plain: &[u8], pass: &str) -> Result<Vec<u8>, GpgError> {
+        if pass.contains(['\n', '\r']) { return Err(GpgError::BadPassphraseChars); }
+        let mut c = self.command();
+        c.args(["--symmetric", "--armor", "--cipher-algo", "AES256", "--output", "-"]);
+        let mut child = c.spawn().map_err(|_| GpgError::NotInstalled)?;
+        let mut stdin = child.stdin.take().expect("piped");
+        // gpg reads the passphrase line from fd 0, then the data from the rest of stdin.
+        let mut input = Vec::with_capacity(pass.len() + 1 + plain.len());
+        input.extend_from_slice(pass.as_bytes()); input.push(b'\n'); input.extend_from_slice(plain);
+        // Write on another thread: writing all input before reading stdout deadlocks
+        // once the stdout pipe buffer (64 KiB) fills.
+        let writer = std::thread::spawn(move || { let _ = stdin.write_all(&input); }); // drop closes stdin
+        let out = child.wait_with_output().map_err(|e| GpgError::Failed(e.to_string()))?;
+        let _ = writer.join();
+        if out.status.success() { Ok(out.stdout) }
+        else { Err(GpgError::Failed(String::from_utf8_lossy(&out.stderr).into_owned())) }
+    }
+    // decrypt(path, pass): self.command() + ["--decrypt", path]; write only "pass\n" to stdin.
+    // Exit status 2 with stderr containing "Bad session key" or "decryption failed"
+    // => WrongPassphrase. Other failures => Failed(stderr).
+}
+```
+If the encrypt round-trip test shows that gpg does not read the data after
+the passphrase line on this gpg version, STOP and record it. The fallback
+(--passphrase-fd 3 through an extra pipe, using the command-fds crate)
+changes the spec's mandated flag and needs the owner's approval.
+
+Notes:
+  - Zero-overwrite before unlink does not guarantee erasure on SSDs or
+    copy-on-write filesystems (btrfs). Say so in the README. Do not claim
+    "secure deletion".
+  - Hold the passphrase only in AppState (Rust). The frontend sends it
+    once and never stores it in zustand or logs it. Clear the input
+    fields when the modal closes.
+  - Never pass the passphrase in argv or in an environment variable (both
+    are visible in /proc).
+
+Acceptance:
+  - Enable encryption ("test-passphrase-1"): the sandbox has
+    hosts.json.gpg, accounts.json.gpg and bookmarks.json.gpg ("-----BEGIN
+    PGP MESSAGE-----"). The *.json files are gone. settings.json is still
+    plain.
+  - While gpg runs: `ps -eo args | grep -c test-passphrase-1` is 0. Run it
+    in a loop during a save.
+  - Restart: the unlock modal appears. A wrong passphrase shows "Wrong
+    passphrase" and the modal stays. The correct one loads the library.
+  - Cancel at unlock -> "Quit FastSSH?" -> the app exits with no file
+    changed.
+  - Disable encryption: the plain files return and the .gpg files are gone.
+  - Copy the fake hosts.json.gpg into a fresh sandbox: the unlock error is
+    readable, and the app offers Quit or "Start empty" (renames the file
+    aside like Stage 1).
+  - Import from EasySSH (sandbox legacy dir): counts 5/1/2. A second
+    import gives 0 added, all skipped. The legacy dir is unchanged (cmp).
+
+--------------------------------------------------------------------------------
+STAGE 11: RECOMMENDED ENHANCEMENTS (OPTIONAL)
+--------------------------------------------------------------------------------
+Goal: Add the highest-value extras without destabilising the core.
+
+Rule: implement in priority order. Finish and test each item before the
+next. Each gets persisted settings where relevant (follow the Stage 1 field
+rule) and a line in the handoff. Stop when the session runs low on time and
+leave the rest listed as "Not started".
+
+P1  Quick connect bar: type "user@host:port" in the filter and press Enter
+    to connect without saving. This is the most common ad-hoc use.
+P1  Remember the passphrase in the OS keychain (spec 4.3) via Secret
+    Service. Use the `keyring` crate with the sync-secret-service feature,
+    or zbus directly. Off by default. If the D-Bus service is missing,
+    disable the toggle with a tooltip.
+P1  A known-host-changed helper: the hostkey error modal gets "Copy
+    command" for `ssh-keygen -R '[host]:port'`. FastSSH still never edits
+    known_hosts itself.
+P2  Tab reorder by drag and rename on a tab double-click (titles stored on
+    the tab only, not persisted).
+P2  Virtualized host list when more than 500 hosts (only if Stage 2
+    measured a lag).
+P2  Export/backup the library to a single JSON file (plain or gpg).
+P2  Broadcast input: type into all tabs of one host at once (a visible
+    warning banner while it is on).
+P3  Restore Localhost tabs too (a setting).
+P3  Per-host "run on connect" bookmark (sent after logged-in).
+P3  Session logging to a file per tab (opt-in, with a size cap).
+
+Reference: src-tauri/src/keychain.rs (P1, shape only)
+```rust
+// cargo add keyring --features sync-secret-service   (check the crate docs for current feature names)
+const SERVICE: &str = "io.github.fastssh.app";
+pub fn store(pass: &str) -> Result<(), String> {
+    keyring::Entry::new(SERVICE, "library-passphrase").map_err(|e| e.to_string())?
+        .set_password(pass).map_err(|e| e.to_string())
+}
+pub fn load() -> Option<String> {
+    keyring::Entry::new(SERVICE, "library-passphrase").ok()?.get_password().ok()
+}
+```
+Note: the keyring crate talks D-Bus directly, so no subprocess and no env
+sanitizing is needed. On KDE, the first access shows a KWallet prompt. On
+GNOME, a locked login keyring shows an unlock prompt. Both are expected. Test it once and record it with a screenshot.
+
+Acceptance: each implemented item has its own tests and an acceptance line
+in the handoff. Every rule 3 command still passes. No core acceptance check
+from Stages 1-10 regresses (re-run the e2e suite).
+
+--------------------------------------------------------------------------------
+STAGE 12: POLISH, TESTS, RELEASE APPIMAGE, README
+--------------------------------------------------------------------------------
+Goal: A reviewed, tested FastSSH 1.0.0 AppImage, built for glibc 2.35
+(22.04), that runs on the build machine, plus user docs.
+
+Tasks:
+12.1 Error-handling review: grep for unwrap()/expect() in non-test Rust
+     code. Each must be justified (a poisoned mutex is acceptable) or
+     replaced with error mapping. Grep for "catch" blocks that swallow
+     errors in TS. Every caught error is logged and shown to the user when
+     an action failed.
+12.2 Edge-case pass. Run each and record the result:
+     an empty library; 2000 hosts; a 255-character host name; Unicode
+     everywhere; a host with an empty user; IPv6 "::1"; an identity file
+     path with a space; a missing identity file (ssh error shown); a
+     hosts folder on a read-only path; a full disk (simulate with a
+     small tmpfs only if the owner approves sudo; otherwise skip and
+     record); 20 tabs open; closing a tab while it connects; Retry spam
+     (5 clicks); a window at minimum size 800x500; fractional display
+     scale 125% in the desktop's display settings (ask the owner to set
+     it, or skip and record).
+12.3 Desktop and windowing (instead of rotation): resize to minimum, then
+     maximize, fullscreen, and back. Move to a second monitor if there is
+     one. Run under the other session type (X11 if the profile says
+     Wayland, or the reverse) if the owner can log into one (otherwise put
+     it in MANUAL_CHECKS). The sidebar and tab bar must
+     never overflow. Long tab titles are truncated with an ellipsis.
+12.4 Performance: confirm with React DevTools or a render-count log that
+     PTY output re-renders only the affected tab-bar item, never the
+     sidebar list. `cat big.txt` over ssh keeps the input responsive.
+     Check the memory after closing 20 tabs (heap snapshot or `ps -o rss`)
+     returns near its earlier value, which proves the terminals were
+     disposed.
+12.5 Accessibility: every icon-only button has an aria-label (from
+     strings.ts). Modals trap focus and restore it. Visible focus rings.
+     Contrast is at least 4.5:1 for text in both themes (check the CSS
+     variables with a contrast calculator). The full keyboard path works:
+     header -> sidebar (arrow keys move the selection, Enter connects) ->
+     workspace.
+12.6 App icon and name: create src-tauri/icons/source/fastssh.svg (a
+     simple terminal-prompt glyph in the accent color on a rounded
+     square, original artwork). Render it to 1024 px and generate the
+     icons:
+         convert -background none -density 384 src-tauri/icons/source/fastssh.svg -resize 1024x1024 /tmp/fastssh-1024.png
+         npm run tauri icon /tmp/fastssh-1024.png
+     Check that the desktop entry name is "FastSSH" and the
+     Categories are Network;RemoteAccess;TerminalEmulator.
+12.7 The release hook check: `grep -r "__fastsshTest" dist/` after
+     `npm run build` must find nothing.
+12.8 Full test list. Run every test and record the counts. Required
+     coverage: env_sanitize, models/settings parsing, storage atomic
+     write and corrupt files, utf8_chunker, pty_manager, ssh_command,
+     ssh_config parse/import/export/backup, gpg, legacy_import,
+     file_browser URL and scheme, naturalSort, hostUtils, tunnels,
+     sshConfigBlock, colors, fontSpec, promptWatcher, lastCommand,
+     slices, and every e2e spec.
+12.9 Release build against Ubuntu 22.04. If the build machine IS Ubuntu
+     22.04 (`ldd --version` shows 2.35), build on the host:
+         NO_STRIP=true npm run tauri build -- --bundles appimage
+     and skip the container. Otherwise use a 22.04 container (ask before
+     pulling the image):
+     tools/appimage-jammy/Dockerfile (reference) and
+     tools/build-appimage-jammy.sh, which mounts the repo read-write at
+     /src, runs as the host UID, and runs `npm ci` + `NO_STRIP=true npm
+     run tauri build -- --bundles appimage`.
+     If the owner declines, build on the host and state in the README:
+     "This build requires glibc >= <X.YY>", filling in the version that
+     `ldd --version` reports on the build machine.
+12.10 Verify the AppImage on the build machine:
+         ./src-tauri/target/release/bundle/appimage/FastSSH_1.0.0_amd64.AppImage --appimage-extract-and-run   (no FUSE path)
+         FASTSSH_CONFIG_DIR=... ./FastSSH_1.0.0_amd64.AppImage   (FUSE path, through tools/dev-sandbox.sh appimage)
+      Inside it: open a Localhost tab and run
+      `env | grep -E 'APPDIR|APPIMAGE|mount_'` (expect nothing) and
+      `ldd /usr/bin/ssh | grep -c mount_` (expect 0). Connect item10.
+      Run gpg encrypt/unlock. Open the file manager with Ctrl+Shift+E.
+      Take a
+      screenshot of each. Also run `unset WEBKIT_DISABLE_DMABUF_RENDERER`
+      before launch and confirm the window renders (the app sets it
+      itself).
+12.11 Signing: AppImages are not signed by default, and this plan does not
+      sign. If the owner later wants signing (`appimagetool --sign` with
+      a GPG key), note that users verify with the public key. If the key
+      changes, previously published signatures no longer match the new
+      key, and users must import the new public key. No auto-updater is
+      configured, so a key change breaks nothing else.
+12.12 README.md: what FastSSH is; install (chmod +x, libfuse2t64 or
+      --appimage-extract-and-run); features with shortcuts; data
+      locations and file formats; EasySSH import; ssh_config sync
+      behaviour (managed section, backup, what is preserved); encryption
+      (what is and isn't protected, the SSD erasure caveat); building
+      from source (deps from spec 10.2, the jammy script); development
+      (sandbox, tests, e2e); troubleshooting (blank window -> DMABUF;
+      "symbol lookup error" -> report it, because env sanitizing should
+      prevent it; the file manager not opening; host key changed).
+12.13 docs/MANUAL_CHECKS.md: every "check on a real device" item collected
+      from the handoffs, each with exact steps and the expected result.
+
+Reference: tools/appimage-jammy/Dockerfile
+```dockerfile
+FROM ubuntu:22.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev \
+    libayatana-appindicator3-dev librsvg2-dev patchelf xdg-utils ca-certificates \
+    libfuse2 git && rm -rf /var/lib/apt/lists/*
+# Node LTS from the official tarball (pin the major you used on the host, read from `node -v`).
+ARG NODE_MAJOR=22
+RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - && apt-get install -y nodejs
+ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
+    && chmod -R a+rwX /opt/rustup /opt/cargo
+WORKDIR /src
+```
+Notes:
+  - linuxdeploy inside Docker needs FUSE, or APPIMAGE_EXTRACT_AND_RUN=1
+    set in the container env. Set it in the build script.
+  - Run the container with `--user "$(id -u):$(id -g)"` and
+    `-e HOME=/tmp/home`, so target/ is not owned by root on the host.
+  - Building in the container reuses neither the host's target/ nor its
+    node_modules (different glibc). The script must use a separate
+    CARGO_TARGET_DIR (src-tauri/target-jammy) and run `npm ci` inside the
+    container into a volume, never into the host's node_modules. Copy the
+    final AppImage to dist-release/.
+
+Acceptance:
+  - Every rule 3 command passes. The e2e suite passes on the debug build.
+  - `objdump -T <extracted>/usr/bin/fastssh | grep -o 'GLIBC_[0-9.]*' |
+    sort -V | tail -1` gives GLIBC_2.35 or lower (22.04 build).
+  - The AppImage launches on the build machine (profile from Stage 00) with a
+    rendered window (screenshot) in both FUSE and extract-and-run modes.
+  - Inside the AppImage, ssh/gpg/xdg-open work, with no "symbol lookup
+    error" in the logs.
+  - README.md and MANUAL_CHECKS.md exist. The requirements table in the
+    handoff shows R1-R22 Done, or each exception is explained.
+  - git tag v1.0.0 (ask the owner before tagging).
+
+
+================================================================================
+ 6. REFERENCE: MAIN SCREEN / ENTRY POINT WIRING
+================================================================================
+
+Reference: src/main.tsx
+```tsx
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import App from './App';
+import { BootError } from './components/BootError';   // message + Quit button
+import { ipc } from './lib/ipc';
+import { useAppStore } from './store/useAppStore';
+import './index.css';
+
+async function boot() {
+  const root = createRoot(document.getElementById('root')!);
+  try {
+    const report = await ipc.loadAll();              // BEFORE first render
+    useAppStore.getState().hydrate(report);          // injects Localhost, applies theme
+    root.render(<StrictMode><App /></StrictMode>);
+  } catch (e) {
+    root.render(<BootError error={String(e)} />);
+  }
+  await getCurrentWindow().show();                   // Rust force-shows after 5 s anyway
+}
+void boot();
+```
+
+Reference: src/App.tsx (final form; keep it under 300 lines by delegating)
+```tsx
+export default function App() {
+  const selectedHostId = useAppStore((s) => s.selectedHostId);
+  const hostIdsWithTabs = useAppStore(useShallow((s) => Object.keys(s.tabOrder).filter((h) => (s.tabOrder[h]?.length ?? 0) > 0)));
+  const selectedHasTabs = useAppStore((s) => (s.tabOrder[s.selectedHostId ?? '']?.length ?? 0) > 0);
+  const editor = useAppStore((s) => s.editor);       // null | {kind:'host'|'account', ...}
+  const panelSize = useAppStore((s) => s.settings.panelSize);
+  const locked = useAppStore((s) => s.locked);
+
+  useShortcuts();          // global key matrix (Stage 6)
+  useWindowState();        // size/maximized -> settings (Stage 1)
+  useCloseHandler();       // close button -> quit flow (Stage 8)
+  useRestoreTabs();        // once, after hydrate (Stage 8)
+
+  return (
+    <div className="flex h-screen flex-col bg-[var(--bg)] text-[var(--fg)]">
+      <HeaderBar />
+      <SearchToolbar />                               {/* renders null when closed */}
+      <div className="flex min-h-0 flex-1">
+        <aside style={{ width: panelSize }} className="shrink-0 border-r border-[var(--border)]">
+          <SourceListView />
+        </aside>
+        <Splitter />
+        <main className="relative flex min-w-0 flex-1">
+          {/* ALL notebooks stay mounted; only the selected one is visible (spec 7.1). */}
+          {hostIdsWithTabs.map((id) => (
+            <HostNotebook key={id} hostId={id}
+              className={id === selectedHostId ? 'flex flex-1 flex-col' : 'hidden'} />
+          ))}
+          {!selectedHasTabs && <WorkspaceEmptyState />}  {/* Welcome or ConnectionLanding */}
+          {editor && <EditorOverlay editor={editor} />}  {/* absolute inset-0; never unmounts notebooks */}
+        </main>
+      </div>
+      <ModalHost />                                   {/* head of queue only */}
+      <Toasts />
+      {locked && <GpgPasswordModal mode="unlock" />}
+    </div>
+  );
+}
+```
+
+Reference: src-tauri/src/lib.rs (final form)
+```rust
+mod commands; mod env_sanitize; mod error; mod file_browser; mod gpg; mod legacy_import;
+mod models; mod paths; mod pty_manager; mod settings; mod ssh_command; mod ssh_config;
+mod storage; mod utf8_chunker;
+use std::sync::Mutex;
+use tauri::Manager;
+
+pub struct AppState {
+    pub settings: Mutex<settings::AppSettings>,
+    pub passphrase: Mutex<Option<String>>,
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let initial = storage::load_settings();             // sync; tolerant
+    tauri::Builder::default()
+        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
+        .manage(AppState { settings: Mutex::new(initial.clone()), passphrase: Mutex::new(None) })
+        .manage(pty_manager::PtyManager::default())
+        .setup(move |app| {
+            log::info!("config_dir={:?} ssh_dir={:?}", paths::config_dir(), paths::ssh_dir());
+            let win = app.get_webview_window("main").expect("main window");
+            let _ = win.set_size(tauri::LogicalSize::new(initial.window_width, initial.window_height));
+            if initial.window_maximized { let _ = win.maximize(); }
+            let w2 = win.clone();
+            std::thread::spawn(move || { std::thread::sleep(std::time::Duration::from_secs(5)); let _ = w2.show(); });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::system::get_runtime_info, commands::system::quit_app,
+            commands::system::open_sftp_file_browser, commands::system::open_url,
+            commands::library::load_all, commands::library::save_hosts,
+            commands::library::save_accounts, commands::library::save_bookmarks,
+            commands::library::save_settings, commands::library::set_hosts_folder,
+            commands::session::spawn_session, commands::session::write_pty,
+            commands::session::resize_pty, commands::session::kill_session,
+            commands::sync::enable_ssh_config_sync, commands::sync::disable_ssh_config_sync,
+            commands::crypto::unlock_library, commands::crypto::set_encryption,
+            commands::crypto::import_easyssh,
+        ])
+        .build(tauri::generate_context!())
+        .expect("error while building FastSSH")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event { app.state::<pty_manager::PtyManager>().kill_all(); }
+        });
+}
+```
+Fragile points:
+  - Never conditionally render a HostNotebook based on selection. Only
+    the class changes. Removing the key or wrapping it in a different
+    parent element remounts it. The registry keeps xterm safe, but React
+    state in the tab bar would reset.
+  - The editor overlay and the modals sit ABOVE the notebooks. When they
+    close, refocus the active terminal (registry.getEntry(tab).term
+    .focus()), or keystrokes go nowhere.
+  - After fullscreen toggles and after closing modals, call safeFit on the
+    visible tab. The container size changed while xterm didn't notice.
+  - JS command args are camelCase (sessionId). Rust params are snake_case
+    (session_id). Tauri converts them. Do not rename one side only.
+  - Events listened to for a session must be unlistened on close and
+    retry. Leaked listeners write into disposed terminals and throw.
+
+
+================================================================================
+ 7. SUGGESTED ADDITIONAL FEATURES AND ENHANCEMENTS
+================================================================================
+
+Core usage tools
+  - Split panes inside a tab (horizontal/vertical) for side-by-side logs.
+  - Port-forward status panel: which -L/-R tunnels are live per tab.
+  - SCP drag-and-drop upload onto a terminal tab (scp in a sanitized
+    child).
+  - Snippets with variables ({{host}}, prompt for values) on top of
+    bookmarks.
+  - Jump-host field in the editor (generates ProxyJump) instead of extra
+    args.
+
+Navigation and library
+  - Favourites/pinned hosts at the top of the sidebar.
+  - Recent connections list in the header menu.
+  - Tags in addition to groups, with a tag filter.
+  - Command palette (Ctrl+Shift+P) for hosts, bookmarks and actions.
+  - Import from PuTTY sessions, Remmina SSH profiles and plain CSV.
+
+Layout
+  - Detach a host notebook into its own window (Tauri multi-window).
+  - Tab overview grid with live thumbnails.
+  - Compact sidebar mode (icons only) for small screens.
+
+Usability and safety
+  - Confirm before closing a tab with a running remote command
+    (foreground process detection via the PTY's process group).
+  - Clipboard paste guard: warn when pasting multi-line text into a
+    terminal.
+  - Idle-session reminder and a configurable ServerAliveInterval per host.
+  - "Copy ssh command" for a host (for use in another terminal).
+  - Per-host environment colour coding (prod = red tab strip).
+
+Technical
+  - Channel-based PTY streaming (tauri::ipc::Channel) if events show
+    overhead.
+  - Flatpak build as a second distribution format.
+  - AppImage self-update via AppImageUpdate zsync info.
+  - Telemetry-free crash log bundle ("Copy diagnostics") for bug reports.
+  - Optional Rust-native SSH (russh) backend for Windows/macOS ports
+    later.
+
+
+================================================================================
+ 8. GLOBAL QUALITY RULES (apply in every stage)
+================================================================================
+
+  - Never block the UI or IPC thread with I/O. Rust file, gpg and process
+    work runs in spawn_blocking or a std thread. The frontend awaits
+    commands and never busy-waits.
+  - Always dispose of what you create: xterm instances, addons, event
+    unlisten functions, ResizeObservers, timers, debouncers, window event
+    listeners and PTY sessions. Each useEffect that subscribes returns a
+    cleanup.
+  - Every child process goes through env_sanitize (grep for
+    "Command::new" and "CommandBuilder::new". Each hit must be followed by
+    a sanitize_* call). This is checked in every stage's handoff.
+  - All user-visible strings live in src/lib/strings.ts. No literal UI
+    text in components (aria-labels included).
+  - Theme: colors come only from the CSS variables in index.css. No
+    hard-coded hex in components (the terminal theme is the exception and
+    is computed in lib/colors.ts).
+  - Logging: Rust uses log::{debug,info,warn,error}. TS uses src/lib/log.ts.
+    No println!, eprintln! or console.log (ESLint no-console = error).
+    Never log passwords, passphrases, Host objects or raw PTY data at info
+    level.
+  - Lint: eslint --max-warnings 0; clippy -D warnings; tsc strict with
+    noUncheckedIndexedAccess. Do not disable a rule inline without a
+    comment giving the reason.
+  - Error messages are user-friendly and actionable. They say what failed,
+    the path or host involved, and what to do ("Check the permissions of
+    ~/.ssh/config").
+  - Every interactive element has a stable data-testid (kebab-case,
+    e.g. "editor-save").
+  - The owner's real files are off-limits (rule 10). Tests use temp dirs.
+    Manual runs use tools/dev-sandbox.sh.
+  - Commit at the end of every stage: "Stage NN: <title>".
+  - Keep files under 300 lines. Split by responsibility, not
+    alphabetically.
+
+
+================================================================================
+ 9. HANDOFF DOCUMENT TEMPLATE
+================================================================================
+
+Save as docs/handoff/HANDOFF_STAGE_<NN>.md (NN = 00..12).
+
+```markdown
+# Handoff - Stage <NN>: <title>
+
+- Date: <YYYY-MM-DD>
+- Status: Complete | Partially complete
+- Next stage: <NN+1>: <title>
+
+## 1. Summary
+<2-5 sentences: what was built, what works, anything notable.>
+
+## 2. Environment
+<Stage 00: full detail. Later stages: one line "Unchanged since Stage NN"
+unless something changed.>
+- OS / desktop / session / GPU:
+- Node / npm (install method):
+- rustc / cargo (install method):
+- Tauri CLI / @tauri-apps/api versions:
+- System packages checked (and versions):
+- Tools: gpg, ssh, xdg-open, kioclient, dolphin, WebKitWebDriver, tauri-driver:
+- Sandbox: ~/fastssh-testenv (fixtures list), container fastssh-sshd status:
+- Machine changes (each with "approved by owner" and the exact command):
+
+## 3. Requirements status
+| Req | Description | Status (Done/Partial/Not started) | Notes |
+|-----|-------------|-----------------------------------|-------|
+| R1  | Host library CRUD | | |
+| R2  | Shared accounts + propagation | | |
+| R3  | Bookmarks popover | | |
+| R4  | Atomic JSON persistence | | |
+| R5  | EasySSH import | | |
+| R6  | GPG encryption | | |
+| R7  | ~/.ssh/config sync | | |
+| R8  | Localhost / local shell | | |
+| R9  | SSH command generation | | |
+| R10 | Host-owned notebooks | | |
+| R11 | Prompt heuristics + modals | | |
+| R12 | Terminal behaviour | | |
+| R13 | Unread + tab count badges | | |
+| R14 | Search toolbar | | |
+| R15 | Alt+C / Alt+Up | | |
+| R16 | SFTP file browser | | |
+| R17 | Shortcut matrix | | |
+| R18 | Preferences + theme | | |
+| R19 | Window + session state | | |
+| R20 | Env sanitizing + DMABUF | | |
+| R21 | AppImage packaging | | |
+| R22 | Navigation (sidebar/filter/welcome) | | |
+
+## 4. Files created / modified
+- `path` - purpose - created|modified
+
+## 5. Architecture notes
+<Store slices touched, data flow, non-obvious decisions, invariants.>
+
+## 6. Data/settings schema
+- schemaVersion: 1
+- <field>: <type> = <default>   (list every AppSettings field)
+- Disk record shape notes (legacy keys):
+
+## 7. Dependencies (resolved versions from package-lock.json / Cargo.lock)
+- npm: <name>@<version>
+- cargo: <name> <version>
+
+## 8. Deviations from the plan and why
+- <deviation> - <reason> - <files>
+
+## 9. Verification
+| Command | Result |
+|---------|--------|
+| npm run lint | |
+| npm run typecheck | |
+| npm test | <N passed> |
+| cargo clippy -D warnings | |
+| cargo test | <N passed> |
+| tauri build --debug --no-bundle | |
+| npm run e2e | <N passed / not run: reason> |
+- Sandbox checks performed (each acceptance bullet -> pass/fail):
+- Screenshots: docs/screenshots/stage_<NN>/<file>.png - <what it shows>
+- Env-sanitize grep result (all Command::new sanitized): yes/no
+- Owner's real files untouched (ls --time-style=full-iso compare): yes/no
+
+## 10. Known issues / TODOs
+- <issue> - <impact> - <suggested fix>
+- Check on a real device: <items>
+
+## 11. Instructions for the next stage
+- First files to open:
+- Pitfalls noticed:
+
+## 12. Open questions for the human
+- <question>
+```
+
+
+================================================================================
+ 10. TESTING WORKFLOW (end of every stage from Stage 0B on)
+================================================================================
+
+1.  Start the test target.
+         docker start fastssh-sshd 2>/dev/null || docker run -d --name fastssh-sshd -p 127.0.0.1:2222:22 fastssh-test-sshd
+         docker ps --filter name=fastssh-sshd --format '{{.Status}}'    (must say "Up")
+    Refresh the fixtures without wiping the state (only use --reset when a
+    stage asks for a clean slate):
+         bash tools/make_fixtures.sh
+    Load a fixture set into the sandbox config when a stage needs one:
+         cp ~/fastssh-testenv/legacy/*.json ~/fastssh-testenv/config/
+2.  Build and run while preserving the app data. The sandbox config dir
+    persists between runs. Never delete it between runs of one stage.
+         npm run tauri build -- --debug --no-bundle
+         ./tools/dev-sandbox.sh debug > /tmp/fastssh-run.log 2>&1 &
+         sleep 5; pgrep -af 'target/debug/fastssh'     (must show one process)
+    Use `./tools/dev-sandbox.sh dev` for hot-reload work. The final checks
+    of a stage always use the built debug binary.
+3.  Permissions. Linux has no runtime prompts, so test the permission-like
+    flows once per relevant stage, with real OS behaviour:
+         chmod 500 ~/fastssh-testenv/config     (saving must show an error toast)
+         chmod 700 ~/fastssh-testenv/config     (restore)
+    The Tauri capability system is the other "permission" layer. After
+    each run, check the log for "not allowed":
+         grep -i 'not allowed' ~/.local/share/io.github.fastssh.app/logs/*.log
+4.  Launch checks: one window titled FastSSH, no errors in the log.
+         grep -iE 'error|panic' /tmp/fastssh-run.log | head
+5.  Screenshots go into docs/screenshots/stage_<NN>/. LOOK at each one
+    with the image-reading tool, and describe in the handoff what you see.
+         mkdir -p docs/screenshots/stage_NN
+         tools/screenshot.sh docs/screenshots/stage_NN/<name>.png window   (active window)
+         tools/screenshot.sh docs/screenshots/stage_NN/<name>.png full     (whole screen, e.g. file manager)
+    In e2e: `await browser.saveScreenshot('docs/screenshots/stage_NN/x.png')`
+    (webview only; works on every desktop). Window mode captures the active
+    window, so bring FastSSH to the front first (click it in e2e, or wait
+    1 s after launch). If screenshot.sh exits 2, use the e2e screenshot.
+6.  Drive the UI with WebdriverIO specs (npm run e2e). Find elements by
+    data-testid with $('[data-testid="landing-connect"]'). Use keys:
+         await browser.keys(['Control', 'Shift', 't'])
+    For a double-click: (await $(sel)).doubleClick(). For right-click:
+    .click({ button: 'right' }). Never click by pixel coordinates. If
+    e2e can't run, do the step by hand in the sandbox and record "manual"
+    plus a screenshot for each acceptance bullet.
+7.  Window states (this desktop's equivalent of rotation): minimum size,
+    maximized, fullscreen (F11) and back. Screenshot each, and check that
+    nothing is clipped and the terminal refits (tput cols).
+8.  Persistence test via force-stop and relaunch:
+         pkill -TERM -f 'target/debug/fastssh'   (graceful: close handlers run)
+         pkill -KILL -f 'target/debug/fastssh'   (crash: data must still be valid JSON)
+         python3 -I -m json.tool ~/fastssh-testenv/config/settings.json > /dev/null && echo VALID
+    Relaunch and confirm that the stage's persisted state is back.
+9.  Logs on a crash or a misbehaviour:
+         tail -n 200 ~/.local/share/io.github.fastssh.app/logs/*.log | grep -vE 'DEBUG'
+         grep -nE 'panicked|ERROR|not allowed|symbol lookup' /tmp/fastssh-run.log
+    For WebKit or rendering issues, rerun with WEBKIT_DEBUG=all and check
+    stderr.
+    Check child processes: `ps -o pid,args --ppid $(pgrep -f target/debug/fastssh)`.
+10. Fallback input paths. The GTK/KDE file dialog (identity file, hosts
+    folder) can't be driven by WebDriver. Type the path into the text
+    field in tests. Open the real dialog once per stage that uses it, and
+    take a screenshot proving that it opened. List "pick a file in the
+    real dialog" under "Check on a real device" for the human.
+
+Cannot be proven on a single machine (mark "check on a real device" in the
+handoff and collect them in docs/MANUAL_CHECKS.md):
+  - The desktop this machine does NOT run: on GNOME, the Dolphin/KIO sftp
+    path, the KWallet prompt and KWin rendering; on KDE, the Nautilus/GVFS
+    sftp path, the GNOME Keyring prompt and Mutter rendering.
+  - The AppImage on clean installs of the Ubuntu releases this machine is
+    not (22.04, 24.04 and newer: glibc and library bundling).
+  - GPU vendors other than this machine's, with and without the DMABUF
+    variable (the blank-window case is mostly NVIDIA + Wayland).
+  - The session type this machine does not use (X11 or Wayland), unless
+    the owner logs into one.
+  - Audible bell loudness and feel; HiDPI fractional scaling, unless the
+    owner enables it.
+  - Picking a file in the native file dialog.
+  - A real remote server with a non-bash shell prompt (zsh, fish).
+
+
+================================================================================
+ 11. SESSION PROMPTS (for the human to paste)
+================================================================================
+
+Before pasting, replace <PLAN_DIR> with the absolute path of the folder that
+holds this plan and the spec (for example /home/<you>/projects/fastssh-plan),
+replace <NN> with stage numbers, and fill in the Machine line.
+
+First session:
+```text
+You are building FastSSH. The plan is at
+~/src/fastssh/docs/FASTSSH_BUILD_PLAN.txt and the spec at
+~/src/fastssh/docs/fastssh_tauri_v2_agent_specification.md.
+Read the whole plan first. ~/src/fastssh/docs in the plan means that folder.
+Machine: <e.g. Ubuntu 24.04, GNOME, Wayland, x86_64>. Detect and record the
+full profile yourself in Stage 0A; do not assume any tool is installed. This
+machine is also the test target; SSH test servers run in a local container
+on 127.0.0.1.
+Execute STAGE 0 only: 0A (environment audit + sandbox fixtures), then 0B
+(project setup). Ask me before ANY sudo, apt, rustup, cargo install, docker
+pull or toolchain upgrade: show the command and why, then wait for my yes.
+Never touch ~/.ssh, ~/.config/easyssh or ~/.config/fastssh. If the 0A smoke
+test fails and can't be fixed, stop and report. Finish with
+docs/handoff/HANDOFF_STAGE_00.md and the "Stage 00" git commit.
+```
+
+Every later session:
+```text
+Continue building FastSSH in ~/src/fastssh.
+1. Read docs/FASTSSH_BUILD_PLAN.txt, then the newest file in docs/handoff/.
+2. Run the session-start checks (plan rule 8). Start the test target
+   (Section 10 step 1) and confirm the current code builds and all tests
+   pass BEFORE changing anything; report any failure first.
+3. Execute STAGE <NN+1> only, following its tasks and reference code.
+4. Test it per Section 10 and every Acceptance bullet; look at your
+   screenshots.
+5. Write docs/handoff/HANDOFF_STAGE_<NN+1>.md and commit
+   "Stage <NN+1>: <title>".
+#Ask before any sudo, install, upgrade or deletion outside the sandbox.
+```
+
+Partial or failed stage:
+```text
+Continue FastSSH in ~/src/fastssh.
+Stage <NN> is "Partially complete". Read docs/FASTSSH_BUILD_PLAN.txt and
+docs/handoff/HANDOFF_STAGE_<NN>.md. Finish ONLY the items under "Known
+issues / TODOs" and any failed Acceptance bullets of Stage <NN>. Do not start
+the next stage. Re-run all verification commands, update the SAME handoff
+file (set Status to Complete if everything passes), and commit
+"Stage <NN>: <title> (completed)".
+```
+
+
+================================================================================
+ END OF PLAN
+================================================================================
