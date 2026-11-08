@@ -1,4 +1,6 @@
 src-tauri/target
+src-tauri/target-jammy
+dist-release
 src-tauri/gen
 dist
 docs/screenshots

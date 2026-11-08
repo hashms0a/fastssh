@@ -30,3 +30,5 @@ src-tauri/target/
 coverage/
 e2e/.tmp/
 docs/screenshots/**/tmp_*
+dist-release/
+src-tauri/target-jammy/

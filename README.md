@@ -177,6 +177,12 @@ Output: `src-tauri/target/release/bundle/appimage/FastSSH_1.0.0_amd64.AppImage`.
 bash tools/build-appimage-jammy.sh   # builds inside ubuntu:22.04, copies the result to dist-release/
 ```
 
+That script builds in a container with a separate `src-tauri/target-jammy` and
+an npm cache outside the repo, then re-packs the AppImage so the desktop entry
+it installs has `Name=FastSSH` and
+`Categories=Network;RemoteAccess;TerminalEmulator;` (Tauri writes an empty
+`Categories=` line).
+
 Building on a newer host links against that host's glibc; the README then states
 the minimum glibc of the machine that produced the file.
 

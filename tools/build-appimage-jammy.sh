@@ -14,7 +14,10 @@ NODE_MAJOR="$(node -v | sed 's/^v//' | cut -d. -f1)"
 docker build --build-arg NODE_MAJOR="$NODE_MAJOR" -t "$IMAGE" tools/appimage-jammy
 if [[ "${1:-}" == "--image" ]]; then echo "image $IMAGE ready"; exit 0; fi
 
-mkdir -p dist-release
+# Named volumes are created root-owned, and the container runs as the host UID,
+# so npm cannot write into them: use host directories instead.
+CACHE="${FASTSSH_JAMMY_CACHE:-$HOME/.cache/fastssh-jammy}"
+mkdir -p dist-release "$CACHE/home" "$CACHE/node_modules"
 docker run --rm \
   --user "$(id -u):$(id -g)" \
   -e HOME=/tmp/home \
@@ -22,10 +25,36 @@ docker run --rm \
   -e APPIMAGE_EXTRACT_AND_RUN=1 \
   -e NO_STRIP=true \
   -v "$PWD":/src \
-  -v fastssh-jammy-node-modules:/src/node_modules \
-  -v fastssh-jammy-home:/tmp/home \
+  -v "$CACHE/node_modules:/src/node_modules" \
+  -v "$CACHE/home:/tmp/home" \
   "$IMAGE" \
   bash -lc 'npm ci --no-audit --no-fund && NO_STRIP=true npm run tauri build -- --bundles appimage'
+
+# Tauri writes an AppImage whose desktop entry has an empty Categories line.
+# The desktop entry is what appimagelauncher installs, so fix it in the AppDir
+# and re-pack with the linuxdeploy the build already downloaded (plan 12.6).
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -e HOME=/tmp/home \
+  -e APPIMAGE_EXTRACT_AND_RUN=1 \
+  -v "$PWD":/src \
+  -v "$CACHE/home:/tmp/home" \
+  "$IMAGE" \
+  bash -lc '
+    set -euo pipefail
+    APPDIR=/src/src-tauri/target-jammy/release/bundle/appimage/FastSSH.AppDir
+    # appimagetool takes the root desktop entry from usr/share/applications, so
+    # patch both copies.
+    for f in "$APPDIR/FastSSH.desktop" "$APPDIR/usr/share/applications/FastSSH.desktop"; do
+      sed -i "s|^Categories=.*|Categories=Network;RemoteAccess;TerminalEmulator;|" "$f"
+      sed -i "s|^Comment=.*|Comment=SSH client with terminal tabs, a connection library, bookmarks and ssh_config sync.|" "$f"
+    done
+    LD=$(ls /tmp/home/.cache/tauri/linuxdeploy-*-x86_64.AppImage | head -1)
+    cd "$(dirname "$APPDIR")"
+    rm -f FastSSH-x86_64.AppImage
+    "$LD" --appdir "$APPDIR" --output appimage
+    mv -f FastSSH-x86_64.AppImage FastSSH_1.0.0_amd64.AppImage
+  '
 
 APPDIR=src-tauri/target-jammy/release/bundle/appimage
 SHOTS=$(ls "$APPDIR"/*.AppImage 2>/dev/null || true)
@@ -39,7 +68,5 @@ ls -lh dist-release/
 
 # The acceptance check (plan 12.9): the binary must not need a newer glibc
 # than the AppImage ships. Extract the ELF and read its GLIBC symbol versions.
-EXTRACT=/tmp/fastssh-jammy-extract
-rm -rf "$EXTRACT"
-BIN=$(find "$APPDIR" -maxdepth 3 -name fastssh -type f | head -1)
+BIN=$(find "$APPDIR" -maxdepth 5 -name fastssh -type f | head -1)
 objdump -T "$BIN" | grep -o 'GLIBC_[0-9.]*' | sort -V | tail -1

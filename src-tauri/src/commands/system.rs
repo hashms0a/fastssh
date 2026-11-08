@@ -48,7 +48,10 @@ pub fn get_runtime_info() -> RuntimeInfo {
         version: env!("CARGO_PKG_VERSION").to_string(),
         desktop,
         session,
-        appimage: env.contains_key("APPIMAGE"),
+        // The clean env has the AppImage variables stripped (children must not
+        // see them), so this reads the process environment instead: the status
+        // line is supposed to say whether the app itself runs from an AppImage.
+        appimage: std::env::var("APPIMAGE").is_ok() || std::env::var("APPDIR").is_ok(),
         dmabuf_disabled: std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER")
             .map(|v| v == "1")
             .unwrap_or(true),
