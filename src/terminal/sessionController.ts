@@ -9,6 +9,7 @@ import { LOCALHOST_HOST, LOCALHOST_ID, type Account, type Host } from "../types/
 import { nextTabTitle, tabIdsOf } from "../store/slices/tabsSlice";
 import { createTerminal, dispose, getEntry, type Entry } from "./terminalRegistry";
 import { terminalOptions } from "./terminalOptions";
+import { ringBell } from "./bell";
 import { beginRemote, feedRemote, forgetRemote, isRemoteTab, remoteExit, writeTab } from "./promptActions";
 import { forgetWrites } from "./writeLog";
 
@@ -55,9 +56,8 @@ function createWriter(term: Terminal) {
 }
 
 /** The tab the user is looking at right now (R13 unread logic). */
-function isForegroundTab(tabId: string): boolean {
-  const s = useAppStore.getState();
-  return s.sidebarMode === "hosts" && (s.activeTabByHost[s.selectedHostId ?? ""] ?? null) === tabId;
+function windowFocused(): boolean {
+  return useAppStore.getState().windowFocused;
 }
 
 function wireStdio(tabId: string, entry: Entry): void {
@@ -109,7 +109,8 @@ async function startSession(tabId: string, host: Host, sessionId: string): Promi
 
   const unlistenOutput: UnlistenFn = await listen<string>(`pty-output-${sessionId}`, (ev) => {
     writer.push(ev.payload);
-    if (!isForegroundTab(tabId)) useAppStore.getState().setTabUnread(tabId, true);
+    // R13: at most one store write per unread episode, never for the visible tab.
+    useAppStore.getState().markOutput(tabId, windowFocused());
     feedRemote(tabId, ev.payload);
   });
   const unlistenExit: UnlistenFn = await listen<number>(`pty-exit-${sessionId}`, (ev) => {
@@ -161,7 +162,10 @@ export async function connectHost(host: Host): Promise<void> {
     exited: false,
     exitCode: null,
   });
-  createTerminal(tabId, terminalOptions(host, st.settings));
+  createTerminal(tabId, terminalOptions(host, st.settings), {
+    // R12: the audible bell follows settings.audibleBell, read at ring time.
+    onBell: () => ringBell(() => useAppStore.getState().settings.audibleBell),
+  });
   await startSession(tabId, host, sessionId);
 }
 

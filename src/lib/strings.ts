@@ -100,6 +100,22 @@ export const strings = {
     dns: "Host name could not be resolved",
     hostkey: "The host key has changed",
   } as Record<import("../terminal/promptWatcher").ErrorKind, string>,
+  // Terminal tools (Stage 6, R12-R15)
+  copy: "Copy",
+  paste: "Paste",
+  selectAll: "Select All",
+  search: "Search",
+  copyLastOutput: "Copy Last Output",
+  scrollLastCommand: "Scroll to Last Command",
+  showInFileBrowser: "Show in File Browser",
+  searchPlaceholder: "Find\u2026",
+  searchNext: "Next",
+  searchPrevious: "Previous",
+  searchCyclic: "Cyclic",
+  searchCase: "Case",
+  copiedLines: (n: number) => `Copied ${n} ${n === 1 ? "line" : "lines"}`,
+  nothingToCopy: "Nothing to copy",
+  noCommandYet: "No command yet",
   // Validation (validateHost message keys)
   validation: {
     nameRequired: "Name is required",

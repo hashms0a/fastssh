@@ -90,6 +90,11 @@ declare global {
       bufferLength(tabId: string): number;
       tabIds(): string[];
       writeCount(tabId: string, text: string): number;
+      viewportY(tabId: string): number;
+      markerLine(tabId: string): number;
+      unread(tabId: string): boolean;
+      isFullscreen(): Promise<boolean>;
+      readClipboard(): Promise<string>;
     };
     __TAURI_INTERNALS__?: { invoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> };
   }
@@ -106,6 +111,25 @@ export const writeCount = async (tabId: string, text: string): Promise<number> =
 
 export const hookTabIds = async (): Promise<string[]> =>
   (await browser.execute(() => window.__fastsshTest?.tabIds() ?? [])) as string[];
+
+/** Stage 6 hooks: scroll position, the Alt+Up marker, the dot, F11, clipboard. */
+export const hookViewportY = async (tabId: string): Promise<number> =>
+  (await browser.execute((id) => window.__fastsshTest?.viewportY(id) ?? -1, tabId)) as number;
+
+export const hookMarkerLine = async (tabId: string): Promise<number> =>
+  (await browser.execute((id) => window.__fastsshTest?.markerLine(id) ?? -1, tabId)) as number;
+
+export const hookUnread = async (tabId: string): Promise<boolean> =>
+  (await browser.execute((id) => window.__fastsshTest?.unread(id) === true, tabId)) as boolean;
+
+export const hookFullscreen = async (): Promise<boolean> =>
+  (await browser.execute(
+    async () => await (window.__fastsshTest?.isFullscreen() ?? Promise.resolve(false)),
+  )) as boolean;
+
+/** Clipboard text as the app's own clipboard plugin sees it. */
+export const hookClipboard = async (): Promise<string> =>
+  (await browser.execute(async () => await (window.__fastsshTest?.readClipboard() ?? Promise.resolve("")))) as string;
 
 export const domTabIds = async (): Promise<string[]> => {
   const ids: string[] = [];
@@ -260,8 +284,91 @@ export async function clickInPage(testId: string, timeout = 15000): Promise<void
   await browser.pause(300);
 }
 
+/** Open a right-click menu inside the page (a W3C right click is unreliable here). */
+export async function contextMenuInPage(selector: string): Promise<void> {
+  await browser.execute((sel) => {
+    document
+      .querySelector(sel)
+      ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 420, clientY: 320 }));
+  }, selector);
+  await browser.pause(300);
+}
+
+/** Focus a text field and type into it, one key at a time: sending the whole
+ *  string right after the field appears drops its first character here. */
+export async function typeInto(testId: string, text: string): Promise<void> {
+  await clickInPage(testId);
+  for (const ch of text) {
+    await browser.keys([ch === " " ? "Space" : ch]);
+    await browser.pause(70);
+  }
+}
+
+/** Labels of the items of an open context menu. */
+export async function menuLabels(testId: string): Promise<string[]> {
+  const out: string[] = [];
+  for (const el of await $$(`[data-testid="${testId}"] [role="menuitem"]`)) out.push((await el.getText()).trim());
+  return out;
+}
+
+/** Click an open menu item by its label, inside the page. */
+export async function menuItemClick(testId: string, label: string): Promise<void> {
+  await browser.execute(
+    (id, l) => {
+      const items = [...document.querySelectorAll<HTMLElement>(`[data-testid="${id}"] [role="menuitem"]`)];
+      items.find((e) => e.textContent?.includes(l))?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    },
+    testId,
+    label,
+  );
+  await browser.pause(300);
+}
+
+/** True when the menu item with this label is rendered disabled. */
+export async function menuItemDisabled(testId: string, label: string): Promise<boolean> {
+  for (const el of await $$(`[data-testid="${testId}"] [role="menuitem"]`)) {
+    if ((await el.getText()).includes(label)) return (await el.getAttribute("disabled")) !== null;
+  }
+  return false;
+}
+
 /** Quit the app from inside the webview. */
 export async function quitApp(): Promise<void> {
   await browser.execute(() => void window.__TAURI_INTERNALS__?.invoke("quit_app"));
   await browser.pause(1200);
+}
+
+/** Every visible toast text (the Stage 6 shortcuts report through toasts). */
+export async function toastTexts(): Promise<string[]> {
+  const out: string[] = [];
+  for (const el of await $$('[data-testid="toast"]')) out.push(await el.getText());
+  return out;
+}
+
+/** The tab strip's unread dot for one tab (R13). Queried inside the page: this
+ *  driver's CSS engine mishandles combined attribute selectors, and the dot is
+ *  hidden with `display: none` when there is nothing unread. */
+export const tabDotVisible = async (tabId: string): Promise<boolean> =>
+  (await browser.execute((id) => {
+    const dot = document
+      .querySelector(`[data-testid="tab"][data-tab-id="${id}"]`)
+      ?.querySelector('[data-testid="tab-unread"]');
+    return !!dot && dot.getClientRects().length > 0;
+  }, tabId)) as boolean;
+
+/** The sidebar row's unread dot (R13). The span is always in the DOM, hidden. */
+export const rowDotVisible = async (name: string): Promise<boolean> =>
+  (await browser.execute((n) => {
+    const dot = document
+      .querySelector(`[data-testid="host-row"][data-name="${n}"]`)
+      ?.querySelector('[data-testid="host-row-unread"]');
+    return !!dot && dot.getClientRects().length > 0;
+  }, name)) as boolean;
+
+export const searchCount = async (): Promise<string> => await (await byTestId("search-count")).getText();
+
+/** "2 / 13" -> [2, 13]; "No more matches" / "Not found" -> null. */
+export function parseCount(text: string): [number, number] | null {
+  const m = /^(\d+) \/ (\d+)$/.exec(text.trim());
+  return m ? [Number(m[1]), Number(m[2])] : null;
 }

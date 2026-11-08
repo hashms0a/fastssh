@@ -1,6 +1,8 @@
 import { useAppStore } from "../store/useAppStore";
-import { getEntry, getText } from "../terminal/terminalRegistry";
+import { readClipboard } from "../lib/clipboard";
+import { getEntry, getText, markerLine, viewportY } from "../terminal/terminalRegistry";
 import { writeCount } from "../terminal/writeLog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 /**
  * Read-only test hook for the e2e specs (plan Stage 4 notes). Installed only
@@ -16,6 +18,15 @@ export interface FastSSHTestHook {
   tabIds(): string[];
   /** How many writes to this tab equal text (Stage 5 password check). */
   writeCount(tabId: string, text: string): number;
+  /** Scroll position and the Alt+Up marker (task 6.6/6.10). */
+  viewportY(tabId: string): number;
+  markerLine(tabId: string): number;
+  /** True when this tab's dot is lit (R13). */
+  unread(tabId: string): boolean;
+  /** Whether the window is fullscreen (F11, R17). */
+  isFullscreen(): Promise<boolean>;
+  /** Clipboard text, for the Alt+C / Ctrl+Shift+C assertions. */
+  readClipboard(): Promise<string>;
 }
 
 export const testHook: FastSSHTestHook = {
@@ -31,6 +42,11 @@ export const testHook: FastSSHTestHook = {
     return s.selectedHostId ? (s.tabOrder[s.selectedHostId] ?? []) : [];
   },
   writeCount: (tabId, text) => writeCount(tabId, text),
+  viewportY: (tabId) => viewportY(tabId),
+  markerLine: (tabId) => markerLine(tabId),
+  unread: (tabId) => useAppStore.getState().tabs[tabId]?.unread === true,
+  isFullscreen: () => getCurrentWindow().isFullscreen(),
+  readClipboard: () => readClipboard(),
 };
 
 export function installTestHook(): void {

@@ -3,6 +3,7 @@ import { strings } from "../../lib/strings";
 import { useAppStore } from "../../store/useAppStore";
 import { closeTab, connectHost } from "../../terminal/sessionController";
 import type { Host } from "../../types/models";
+import { SearchToolbar } from "../SearchToolbar";
 import { TerminalPane } from "./TerminalPane";
 
 const NO_TABS: string[] = [];
@@ -71,6 +72,7 @@ interface Props {
 export function HostNotebook({ host, visible }: Props) {
   const ids = useAppStore((s) => s.tabOrder[host.id] ?? NO_TABS);
   const activeId = useAppStore((s) => s.activeTabByHost[host.id] ?? null);
+  const searchOpen = useAppStore((s) => s.searchOpen);
 
   return (
     <section
@@ -78,6 +80,8 @@ export function HostNotebook({ host, visible }: Props) {
       data-host-id={host.id}
       className={`${visible ? "flex min-h-0 flex-1 flex-col" : "hidden"}`}
     >
+      {/* R14: the toolbar belongs to the visible notebook's active tab. */}
+      {visible && searchOpen && <SearchToolbar />}
       <div
         data-testid="tab-bar"
         role="tablist"

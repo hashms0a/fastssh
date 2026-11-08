@@ -3,6 +3,7 @@ import { ipc, type RuntimeInfo } from "./lib/ipc";
 import { strings } from "./lib/strings";
 import { logError } from "./lib/log";
 import { useWindowState } from "./hooks/useWindowState";
+import { useWindowFocus } from "./hooks/useWindowFocus";
 import { useCloseHandler } from "./hooks/useCloseHandler";
 import { useShortcuts } from "./hooks/useShortcuts";
 import { useAppStore } from "./store/useAppStore";
@@ -18,6 +19,7 @@ export default function App() {
   const [info, setInfo] = useState<RuntimeInfo | null>(null);
   const panelSize = useAppStore((s) => s.settings.panelSize);
   useWindowState();
+  useWindowFocus();
   useCloseHandler();
   useShortcuts();
 

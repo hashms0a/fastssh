@@ -24,6 +24,16 @@ export interface TabsSlice {
   /** Drops every tab of a host (used when the host itself is removed). */
   dropHostTabs: (hostId: string) => void;
   setActiveTab: (hostId: string, tabId: string | null) => void;
+  /** Ctrl+Shift+Left/Right (R17): wrap to the previous/next tab of the host. */
+  cycleActiveTab: (hostId: string, dir: 1 | -1) => void;
+  /**
+   * PTY output for a tab (task 6.7, R13). Writes the store at most once per
+   * unread episode, and never for the tab the user is looking at.
+   */
+  markOutput: (tabId: string, windowFocused: boolean) => void;
+  /** Window regained focus: the tab in front has nothing unread left.
+   *  `selectedHostId` comes from the ui slice (the store is combined). */
+  clearUnreadOfActiveTab: (windowFocused: boolean) => void;
   setTabSession: (tabId: string, sessionId: string) => void;
   setTabUnread: (tabId: string, unread: boolean) => void;
   setTabLoggedIn: (tabId: string) => void;
@@ -107,6 +117,38 @@ export const createTabsSlice: StateCreator<AppStore, [], [], TabsSlice> = (set, 
     const tabs = { ...s.tabs };
     if (tabId && tabs[tabId]) tabs[tabId] = { ...tabs[tabId], unread: false };
     set({ tabs, activeTabByHost: { ...s.activeTabByHost, [hostId]: tabId } });
+  },
+
+  cycleActiveTab: (hostId, dir) => {
+    const s = get();
+    const order = tabIdsOf(s, hostId);
+    if (order.length === 0) return;
+    const current = activeTabOf(s, hostId);
+    const index = current ? order.indexOf(current) : 0;
+    const next = (((index + dir) % order.length) + order.length) % order.length;
+    const tabId = order[next]!;
+    const tabs = { ...s.tabs };
+    if (tabs[tabId]) tabs[tabId] = { ...tabs[tabId], unread: false };
+    set({ tabs, activeTabByHost: { ...s.activeTabByHost, [hostId]: tabId } });
+  },
+
+  markOutput: (tabId, windowFocused) => {
+    const s = get();
+    const tab = s.tabs[tabId];
+    if (!tab || tab.unread) return; // one store write per unread episode, not per chunk
+    const visible =
+      windowFocused && s.sidebarMode === "hosts" && (s.activeTabByHost[s.selectedHostId ?? ""] ?? null) === tabId;
+    if (visible) return;
+    set({ tabs: { ...s.tabs, [tabId]: { ...tab, unread: true } } });
+  },
+
+  clearUnreadOfActiveTab: (windowFocused) => {
+    if (!windowFocused) return;
+    const s = get();
+    const active = s.selectedHostId ? (s.activeTabByHost[s.selectedHostId] ?? null) : null;
+    const tab = active ? s.tabs[active] : undefined;
+    if (!tab || tab.unread !== true) return;
+    set({ tabs: { ...s.tabs, [tab.id]: { ...tab, unread: false } } });
   },
 
   setTabSession: (tabId, sessionId) => {

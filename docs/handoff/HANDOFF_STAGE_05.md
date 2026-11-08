@@ -215,10 +215,14 @@ full verify: all OK
 
 - Browse for the identity file: the native dialog opens and picking a file
   fills the field (Stage 3 bullet, V10 fallback).
+  yes
 - A real host whose key changed: ssh prints
   `WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!`, the dialog shows the
   lines and the `ssh-keygen -R` hint, and FastSSH leaves known_hosts alone.
+  Yes
 - A real keyboard-interactive / 2FA host: the prompts appear in the terminal
   and the typed password is not echoed.
+  yes
 - A real `ssh -L` tunnel against a host you own: `curl` through the forwarded
   port works while the tab is open and stops when it closes.
+  yes

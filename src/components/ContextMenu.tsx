@@ -42,12 +42,14 @@ export function ContextMenu({ x, y, items, onClose, testId = "context-menu" }: P
       if (!ref.current?.contains(e.target as Node)) onClose();
     };
     const close = () => onClose();
-    window.addEventListener("keydown", onKey);
+    // Capture phase: when the terminal has focus, xterm consumes Escape and
+    // stops propagation, so a bubble-phase listener would never see it.
+    window.addEventListener("keydown", onKey, true);
     window.addEventListener("pointerdown", onPointer, true);
     window.addEventListener("blur", close);
     window.addEventListener("scroll", close, true);
     return () => {
-      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("pointerdown", onPointer, true);
       window.removeEventListener("blur", close);
       window.removeEventListener("scroll", close, true);
