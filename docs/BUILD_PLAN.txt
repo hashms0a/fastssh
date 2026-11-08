@@ -920,7 +920,7 @@ Tasks:
          cp ../fastssh_tauri_v2_agent_specification.md docs/SPEC.md
          cp ~/fastssh-testenv/make_fixtures.sh ~/fastssh-testenv/screenshot.sh tools/
          chmod +x tools/*.sh
-         mv ~/fastssh-testenv/stage00-smoke.png docs/screenshots/stage_00/smoke.png
+         mv ~/fastssh-testenv/stage00-smoke.png (screenshot withheld from the public repo: it showed the developer's local username and hostname)
          cp ~/fastssh-testenv/sshd/Dockerfile tools/test-sshd/
          mv ~/fastssh-testenv/HANDOFF_STAGE_00.md docs/handoff/
       Write CLAUDE.md (10-20 lines). It says: read docs/BUILD_PLAN.txt and

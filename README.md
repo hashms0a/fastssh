@@ -238,3 +238,20 @@ does not publish signatures. If signing is added later
 key: replacing the key means older signatures no longer verify, and users must
 import the new public key. There is no auto-updater, so nothing else depends on
 the key.
+
+## Development
+
+```bash
+npm ci
+npm run verify:quick   # prettier, eslint, tsc, vitest
+npm run dev            # frontend only
+npm run tauri dev      # full app (needs the Linux deps above)
+```
+
+`npm run verify full` adds the debug build, a launch smoke test, and the e2e
+suite. CI on GitHub runs the frontend checks only; the e2e suite needs a
+desktop session and the sandbox sshd container.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

@@ -191,7 +191,7 @@ AppImage smoke (in the script): launched, assets loaded, no panic
 ./tools/dev-sandbox.sh appimage-extract    → window renders, screenshot
 ```
 
-Screenshots: `docs/screenshots/stage_12/appimage-fuse.png`,
+Screenshots: `(screenshot withheld from the public repo: it showed the developer's local username and hostname)`,
 `appimage-extract-and-run.png`, `window-min.png`, `window-maximized.png`.
 No `panicked`, no `symbol lookup error` in either launch log; the status line
 shows `FastSSH 1.0.0 - GNOME/wayland - DMABUF disabled: yes`.

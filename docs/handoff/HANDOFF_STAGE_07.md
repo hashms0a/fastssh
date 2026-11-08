@@ -67,7 +67,7 @@ Created
 - `src/components/BookmarksPopover.tsx` - the popover (testids: `bookmarks-popover`, `bookmark-search`, `bookmark-list`, `bookmark-row[data-name]`, `bookmark-run`, `bookmark-delete`, `bookmark-name`, `-name-error`, `bookmark-command`, `-command-error`, `bookmark-add`, `bookmark-empty`)
 - `src/lib/fileBrowser.test.tsx` (7 tests), `src/terminal/terminalActions.test.ts` (5)
 - `e2e/specs/bookmarks.e2e.ts` (4 tests)
-- `docs/screenshots/stage_07/file-browser-sftp.png`
+- `(screenshot withheld from the public repo: it showed the developer's local username and hostname)`
 - `docs/MANUAL_CHECKS.md` - created with the Stage 7 `[human]` items
 
 Modified
@@ -170,7 +170,7 @@ cargo test     OK   6s
 Test counts: vitest 229 passed / 30 files, cargo 74 passed, e2e 4 passed
 (bookmarks). Because `typeInto` and the Stage 6 Ctrl+Shift+E row changed, the
 Stage 6 specs were re-run: `tools.e2e.ts` 9 passing, `tools-menu.e2e.ts` 2
-passing. That run re-took `docs/screenshots/stage_06/search-toolbar.png` (the
+passing. That run re-took `(screenshot withheld from the public repo: it showed the developer's local username and hostname)` (the
 Stage 6 spec's own shot); it still shows the toolbar with "2 / 2" and the
 bad-port toast, and now also the live Bookmarks button.
 
@@ -189,7 +189,7 @@ Acceptance, one row per bullet:
 | Clicking https://example.com opens the browser; file:///etc/passwd does not                                                                                                 | human       | `docs/MANUAL_CHECKS.md`; the scheme rule is unit-proven                                                                                                                                                                                                                                                                                                                                                                     | -                  |
 | The other desktop's file-manager path (kioclient/dolphin)                                                                                                                   | human       | `docs/MANUAL_CHECKS.md` (`dolphin` is not installed here)                                                                                                                                                                                                                                                                                                                                                                   | -                  |
 
-Screenshot (1 of the 1 allowed): `docs/screenshots/stage_07/file-browser-sftp.png`
+Screenshot (1 of the 1 allowed): `(screenshot withheld from the public repo: it showed the developer's local username and hostname)`
 — the item10 notebook logged into the container (`tester@8d4c59aa80d5:~$`), the
 live Bookmarks button in the header, and bottom-right the error toast "Could not
 open a file browser. Copy this address: sftp://tester@127.0.0.1:2222/" with its

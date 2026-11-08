@@ -204,6 +204,6 @@ provider=external ... Cannot read properties of undefined (reading 'bind')`,
       the file manager open. The status line at the bottom must read
       `AppImage: yes`, and nothing in the log may say `symbol lookup error`.
       What is already proven without a driver: the window renders in both modes
-      (`docs/screenshots/stage_12/appimage-fuse.png`,
+      (`(screenshot withheld from the public repo: it showed the developer's local username and hostname)`,
       `appimage-extract-and-run.png`), the binary needs `GLIBC_2.34`, and the
       shipped bundle contains no `__fastsshTest` hook.

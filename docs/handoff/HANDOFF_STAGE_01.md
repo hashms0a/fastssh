@@ -24,7 +24,7 @@ Same machine profile as HANDOFF_STAGE_00 §2 (Ubuntu 26.04.1, GNOME 50.1
 Wayland, AMD 680M). Session-start checks re-run and matched:
 node v26.13.0, npm 11.20.0, rustc/cargo 1.99.1, `ubuntu:GNOME wayland`,
 container fastssh-sshd "Up". No system changes were needed this stage.
-Git identity is now repo-local `FastSSH-Dev <dev@fastssh.local>` (owner
+Git identity is now repo-local `FastSSH Dev <dev@fastssh.local>` (owner
 answer to Stage 00 §12).
 
 ## 3. Requirements status

@@ -64,7 +64,7 @@ Created
 - `src/hooks/useWindowFocus.ts` - window focus/blur -> `windowFocused` + clear the visible tab's dot
 - `src/hooks/useWindowState.test.ts` - the `[unit]` fullscreen bullet
 - `e2e/specs/tools.e2e.ts` (9 tests) and `e2e/specs/tools-menu.e2e.ts` (2 tests)
-- `docs/screenshots/stage_06/search-toolbar.png`
+- `(screenshot withheld from the public repo: it showed the developer's local username and hostname)`
 
 Modified
 
@@ -197,7 +197,7 @@ Acceptance, one row per bullet:
 | Background output shows the tab dot and the row dot; focusing clears both                         | e2e   | `tools.e2e.ts` "output in a background tab lights the tab dot and the row dot"                                                                                                    | PASS |
 | `useWindowState` ignores sizes while fullscreen                                                   | unit  | `src/hooks/useWindowState.test.ts` "ignores sizes while fullscreen so the restore size survives" (+ "writes only the maximized flag while maximized")                             | PASS |
 | F11 toggles `isFullscreen()` both ways                                                            | e2e   | `tools.e2e.ts` "F11 toggles fullscreen on and off"                                                                                                                                | PASS |
-| One screenshot of the search toolbar with a result count                                          | agent | `docs/screenshots/stage_06/search-toolbar.png`                                                                                                                                    | PASS |
+| One screenshot of the search toolbar with a result count                                          | agent | `(screenshot withheld from the public repo: it showed the developer's local username and hostname)`                                                                               | PASS |
 
 Shortcut matrix, row by row (spec §9):
 
@@ -218,7 +218,7 @@ Shortcut matrix, row by row (spec §9):
 | Alt+Up                  | e2e Alt+Up scroll test                                                                                                                                                    |
 | F11                     | e2e F11 test                                                                                                                                                              |
 
-Screenshot (1 of the 1 allowed): `docs/screenshots/stage_06/search-toolbar.png`
+Screenshot (1 of the 1 allowed): `(screenshot withheld from the public repo: it showed the developer's local username and hostname)`
 — the toolbar over the Localhost notebook with query "1", counter "2 / 2",
 Previous/Next, Cyclic unchecked, Case checked, the active match highlighted in
 amber on the echoed command line, the sidebar with the Localhost badge "1", and

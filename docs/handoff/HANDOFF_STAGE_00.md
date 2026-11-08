@@ -93,9 +93,9 @@ webkitgtk-webdriver gnome-screenshot`
 - `docs/BUILD_PLAN.txt` - created (copy of FASTSSH_BUILD_PLAN.txt)
 - `docs/SPEC.md` - created (copy of fastssh_tauri_v2_agent_specification.md)
 - `docs/handoff/HANDOFF_STAGE_00.md` - this file
-- `docs/screenshots/stage_00/smoke.png` - created (A.12 template smoke window)
-- `docs/screenshots/stage_00/sandbox-window.png` - created (FastSSH debug build in sandbox, DMABUF yes)
-- `docs/screenshots/stage_00/sandbox-window-dmabuf-off.png` - created (WEBKIT_DISABLE_DMABUF_RENDERER=0 -> "no")
+- `(screenshot withheld from the public repo: it showed the developer's local username and hostname)` - created (A.12 template smoke window)
+- `(screenshot withheld from the public repo: it showed the developer's local username and hostname)` - created (FastSSH debug build in sandbox, DMABUF yes)
+- `(screenshot withheld from the public repo: it showed the developer's local username and hostname)` - created (WEBKIT_DISABLE_DMABUF_RENDERER=0 -> "no")
 - `docs/screenshots/stage_00/e2e-smoke.png` - created (e2e browser.saveScreenshot)
 - `tools/make_fixtures.sh`, `tools/screenshot.sh`, `tools/dev-sandbox.sh` - created (+x)
 - `tools/test-sshd/Dockerfile` - created (same as sandbox sshd image)
@@ -203,7 +203,7 @@ webkitgtk-webdriver gnome-screenshot`
 | npm run e2e                               | 1 passed (smoke: title FastSSH, header-bar exists, screenshot saved) |
 
 - A.12 smoke test: template debug binary showed a rendered "Welcome to
-  Tauri + React" window (docs/screenshots/stage_00/smoke.png, copied from
+  Tauri + React" window ((screenshot withheld from the public repo: it showed the developer's local username and hostname), copied from
   ~/fastssh-testenv/stage00-smoke.png) and
   `NO_STRIP=true npm run tauri build -- --bundles appimage` produced
   smoke_0.1.0_amd64.AppImage (84 MiB). NO_STRIP was needed; not tested
@@ -211,9 +211,9 @@ webkitgtk-webdriver gnome-screenshot`
 - A.13: fastssh-sshd Up, KEY-OK printed, sandbox known_hosts reset to empty
   (so Stage 5 can show the fingerprint modal).
 - Screenshots:
-  - docs/screenshots/stage_00/smoke.png - A.12 template window, rendered (Tauri+React logos, greet form).
-  - docs/screenshots/stage_00/sandbox-window.png - FastSSH debug binary via tools/dev-sandbox.sh: title "FastSSH", header bar "FastSSH", empty sidebar, workspace line "FastSSH 1.0.0 - ubuntu/wayland - AppImage: no - DMABUF disabled: yes". Not blank.
-  - docs/screenshots/stage_00/sandbox-window-dmabuf-off.png - same with WEBKIT_DISABLE_DMABUF_RENDERER=0 exported: line shows "DMABUF disabled: no" (existing value respected).
+  - (screenshot withheld from the public repo: it showed the developer's local username and hostname) - A.12 template window, rendered (Tauri+React logos, greet form).
+  - (screenshot withheld from the public repo: it showed the developer's local username and hostname) - FastSSH debug binary via tools/dev-sandbox.sh: title "FastSSH", header bar "FastSSH", empty sidebar, workspace line "FastSSH 1.0.0 - ubuntu/wayland - AppImage: no - DMABUF disabled: yes". Not blank.
+  - (screenshot withheld from the public repo: it showed the developer's local username and hostname) - same with WEBKIT_DISABLE_DMABUF_RENDERER=0 exported: line shows "DMABUF disabled: no" (existing value respected).
   - docs/screenshots/stage_00/e2e-smoke.png - WebdriverIO saveScreenshot of the webview.
 - Env-sanitize grep: `Command::new`/`CommandBuilder::new` currently appear
   only inside env_sanitize's API (no subprocess spawns yet); every future
@@ -261,7 +261,7 @@ webkitgtk-webdriver gnome-screenshot`
 
 - Git identity: keep `FastSSH Dev <dev@fastssh.local>` (repo-local) or set
   your own via `git config user.name/user.email` in fastssh/?
-  FastSSH-Dev/dev@fastssh.local
+  FastSSH Dev <dev@fastssh.local>
 - The runtime line shows "ubuntu/wayland" (from XDG_CURRENT_DESKTOP).
   Show "GNOME/wayland" instead in Stage 2? Cosmetic; plan's acceptance
   example says "GNOME/wayland".
