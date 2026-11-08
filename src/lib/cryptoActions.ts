@@ -84,6 +84,30 @@ export async function startEmptyLibrary(d: UnlockDeps): Promise<UnlockResult> {
   }
 }
 
+export interface LockDeps {
+  lock: () => Promise<void>;
+  /** store.setLocked(true) - `App.tsx` then shows the unlock modal again. */
+  setLocked: (locked: boolean) => void;
+  log: (message: string, error: unknown) => void;
+}
+
+/**
+ * Stage 11, the answer to Stage 10's open question 1: "Lock library now".
+ * Rust forgets the passphrase; the library stays in memory until the next
+ * read or save, which then needs the passphrase again. No toast - the unlock
+ * modal appearing is the whole report.
+ */
+export async function lockLibrary(d: LockDeps): Promise<boolean> {
+  try {
+    await d.lock();
+    d.setLocked(true);
+    return true;
+  } catch (e) {
+    d.log("lock_library failed", e);
+    return false;
+  }
+}
+
 export interface EncryptDeps {
   setEncryption: (enabled: boolean, passphrase: string | null) => Promise<void>;
   /** updateSettings({encryptData}) - the frontend owns the settings writer. */

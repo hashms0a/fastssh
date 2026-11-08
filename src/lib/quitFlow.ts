@@ -19,16 +19,18 @@ export interface QuitDeps extends QuitState {
 
 /**
  * One entry per host that has tabs, in the order the notebooks were opened.
- * Localhost is never listed: EasySSH did not restore local shells either, and
- * a restored local shell would reopen a shell on every start (Stage 8 Notes).
- * With Restore off the list is empty, so the next start opens nothing.
+ * Localhost is left out unless the new Stage 11 setting is on: EasySSH did not
+ * restore local shells either, and a restored local shell reopens a shell on
+ * every start (Stage 8 Notes). With Restore off the list is empty, so the next
+ * start opens nothing.
  */
 export function openedHostsFor(s: QuitState): OpenedHostState[] {
   const out: OpenedHostState[] = [];
   for (const [hostId, ids] of Object.entries(s.tabOrder)) {
     if (ids.length === 0) continue;
     const host = s.hosts.find((h) => h.id === hostId);
-    if (!host || host.local === true) continue;
+    if (!host) continue;
+    if (host.local === true && s.settings.restoreLocalhost !== true) continue;
     out.push({ hostName: host.name, tabCount: ids.length });
   }
   return out;

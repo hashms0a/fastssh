@@ -29,8 +29,18 @@ describe("restorePlan (task 8.5)", () => {
     expect(plan[0]?.tabCount).toBe(MAX_RESTORE_TABS_PER_HOST);
   });
 
-  it("never restores Localhost", () => {
+  it("never restores Localhost while the setting is off", () => {
     expect(restorePlan([entry("Localhost", 2)], hosts)).toEqual([]);
+    expect(restorePlan([entry("Localhost", 2)], hosts, false)).toEqual([]);
+  });
+
+  it("restores Localhost when the Stage 11 setting is on", () => {
+    const plan = restorePlan([entry("Localhost", 2), entry("item2", 1)], hosts, true);
+    expect(plan.map((p) => [p.host.name, p.tabCount])).toEqual([
+      ["Localhost", 2],
+      ["item2", 1],
+    ]);
+    expect(plan[0]?.host.local).toBe(true);
   });
 });
 

@@ -112,3 +112,14 @@ pub async fn import_easyssh(state: State<'_, crate::AppState>) -> Result<ImportR
     let crypto = crypto_ctx(&state);
     blocking(move || legacy_import::import(&settings, &crypto)).await
 }
+
+/// Stage 11 (Stage 10 open question 1): drop the passphrase from memory.
+/// Files on disk are untouched, open tabs keep their sessions; the next read or
+/// save needs the passphrase again, which is what makes the UI show the unlock
+/// modal. Nothing is written here, so no `AppError` is possible.
+#[tauri::command]
+pub async fn lock_library(state: State<'_, crate::AppState>) -> Result<(), AppError> {
+    *state.passphrase.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    log::info!("library locked; the passphrase is no longer held");
+    Ok(())
+}

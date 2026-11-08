@@ -1,5 +1,6 @@
 //! One module per command group; the handlers themselves stay thin.
 pub mod crypto;
+pub mod export;
 pub mod library;
 pub mod session;
 pub mod sync;

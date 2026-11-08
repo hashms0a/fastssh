@@ -83,6 +83,15 @@ export function installIpcMock(overrides: Partial<LoadReport> = {}): MockBackend
           skipped: [],
           warnings: [],
         };
+      // Stage 11: one backup file of the library.
+      case "export_library":
+        return {
+          path: "/tmp/fastssh-mock/backups/fastssh-library-20261108-140731.json",
+          encrypted: false,
+          hosts: 5,
+          accounts: 1,
+          bookmarks: 2,
+        };
       case "enable_ssh_config_sync":
         return {
           backupPath: "/tmp/fastssh-mock/ssh/config.backup",

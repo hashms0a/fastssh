@@ -48,6 +48,23 @@ describe("openedHostsFor (task 8.4)", () => {
     ]);
   });
 
+  it("lists Localhost too when restoreLocalhost is on", () => {
+    const settings = { ...DEFAULT_SETTINGS, restoreHosts: true, restoreLocalhost: true };
+    expect(openedHostsFor({ settings, hosts, tabOrder })).toEqual([
+      { hostName: "Localhost", tabCount: 2 },
+      { hostName: "item10", tabCount: 1 },
+      { hostName: "item2", tabCount: 3 },
+    ]);
+  });
+
+  it("keeps Localhost out when restoreHosts is off, whatever the new flag says", () => {
+    const settings = { ...DEFAULT_SETTINGS, restoreHosts: false, restoreLocalhost: true };
+    const log: Log = { order: [], patches: [] };
+    return quitFlow(deps(log, { settings })).then(() => {
+      expect(log.patches[0]?.openedHosts).toEqual([]);
+    });
+  });
+
   it("ignores empty notebooks and hosts that are gone", () => {
     const order = { item10: [], ghost: ["x"] };
     expect(openedHostsFor({ settings: DEFAULT_SETTINGS, hosts, tabOrder: order })).toEqual([]);

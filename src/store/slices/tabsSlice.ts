@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { moveOnto, tabTitle } from "../../lib/tabReorder";
 import type { AppStore } from "../useAppStore";
 
 /** One terminal tab (task 4.7). `sessionId` changes on Retry (Stage 5);
@@ -26,6 +27,11 @@ export interface TabsSlice {
   setActiveTab: (hostId: string, tabId: string | null) => void;
   /** Ctrl+Shift+Left/Right (R17): wrap to the previous/next tab of the host. */
   cycleActiveTab: (hostId: string, dir: 1 | -1) => void;
+  /** Stage 11 (P2): a drag drop - the dragged tab takes the target's slot. */
+  moveTab: (hostId: string, draggedId: string, targetId: string) => void;
+  /** Stage 11 (P2): rename on a double-click. The title lives on the tab only;
+   *  tabs are never written to disk, so nothing is persisted. */
+  renameTab: (tabId: string, title: string) => void;
   /**
    * PTY output for a tab (task 6.7, R13). Writes the store at most once per
    * unread episode, and never for the tab the user is looking at.
@@ -130,6 +136,23 @@ export const createTabsSlice: StateCreator<AppStore, [], [], TabsSlice> = (set, 
     const tabs = { ...s.tabs };
     if (tabs[tabId]) tabs[tabId] = { ...tabs[tabId], unread: false };
     set({ tabs, activeTabByHost: { ...s.activeTabByHost, [hostId]: tabId } });
+  },
+
+  moveTab: (hostId, draggedId, targetId) => {
+    const s = get();
+    const order = tabIdsOf(s, hostId);
+    const next = moveOnto(order, draggedId, targetId);
+    if (next.every((id, i) => id === order[i])) return;
+    set({ tabOrder: { ...s.tabOrder, [hostId]: next } });
+  },
+
+  renameTab: (tabId, title) => {
+    const s = get();
+    const tab = s.tabs[tabId];
+    if (!tab) return;
+    const next = tabTitle(title, tab.title);
+    if (next === tab.title) return;
+    set({ tabs: { ...s.tabs, [tabId]: { ...tab, title: next } } });
   },
 
   markOutput: (tabId, windowFocused) => {

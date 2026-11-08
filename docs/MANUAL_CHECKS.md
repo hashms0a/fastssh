@@ -80,7 +80,6 @@ everything that can be asserted lives in a vitest unit test or an e2e spec.
 - [ ] Audible bell (Stage 6 item, still open): loudness and the 200 ms throttle
       feel right on real hardware.
 
-
 ## Stage 10 - GPG encryption, unlock, EasySSH import
 
 - [ ] Type a real passphrase on real hardware: enable Encrypt, quit FastSSH,
@@ -103,3 +102,36 @@ everything that can be asserted lives in a vitest unit test or an e2e spec.
 - [ ] On the 22.04 AppImage (Stage 12), confirm `gpg` is found on `PATH` inside
       the AppImage environment; encryption without a system gpg needs a bundled
       binary, which Stage 10 does not do.
+
+## Stage 11 - tab drag/rename, library backup, Localhost restore
+
+- [ ] Drag a tab with a real mouse: grab a tab in a notebook with 3+ tabs, drag
+      it left and right, and drop it between two tabs. The e2e spec dispatches
+      HTML5 drag events (a W3C pointer drag starts no HTML5 drag under
+      tauri-driver), so only a person can judge the drag affordance: does the
+      dashed outline on the hovered tab make it obvious where the tab will land,
+      and does the tab follow the pointer without flicker? Dropping a tab on
+      another host's notebook must do nothing (the drag is per notebook).
+- [ ] Double-click a tab to rename it: with a real mouse the first click of the
+      double-click also selects the tab, which mounts its terminal pane. Check
+      the rename field keeps the focus and the caret lands in the text, on both
+      GNOME and KDE. Escape must cancel, Enter commit, and clicking elsewhere
+      commit once.
+- [ ] "Export library…" opens the native save dialog (GTK on GNOME, Qt on KDE).
+      Pick a folder outside the config dir - a USB stick or the Desktop - and
+      check the file is there, is plain JSON when Encrypt data is off, and is
+      ASCII-armored `-----BEGIN PGP MESSAGE-----` (named `*.json.gpg`) when it is
+      on. Cancel must write nothing. The dialog cannot be driven by the test
+      harness; the unit test only proves the cancel path.
+- [ ] Back up a library with 2000 hosts (`big` fixture): one menu press should
+      finish well under a second and the toast should name the file; then open
+      the file and check the count is 2000 and no Localhost entry appears.
+- [ ] "Restore local shells too": with it on, quit with two Localhost tabs and
+      start again - two local shells must reopen in `$HOME`, and the Localhost
+      row must be selected. Then turn it off, quit and start: nothing reopens.
+      On a machine where `$SHELL` is fish or zsh, confirm the restored tabs
+      still close cleanly on `logout` (the prompt heuristics may miss those).
+- [ ] "Lock library" on a real desktop: click it while three tabs are open. The
+      unlock modal must appear at once, the open terminals must keep working,
+      and editing a connection must fail with the locked message until you
+      unlock. Nothing on disk changes.

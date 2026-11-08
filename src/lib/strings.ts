@@ -34,6 +34,7 @@ export const strings = {
   connect: "Connect",
   newTab: "New tab",
   closeTab: "Close tab",
+  renameTab: "Rename tab",
   edit: "Edit",
   duplicate: "Duplicate",
   remove: "Remove",
@@ -186,6 +187,20 @@ export const strings = {
     `Imported ${h} connection${h === 1 ? "" : "s"}, ${a} account${a === 1 ? "" : "s"}, ${b} bookmark${b === 1 ? "" : "s"}` +
     (skipped > 0 ? ` (${skipped} skipped)` : ""),
   importWarnings: (warnings: string[]) => warnings.join(" \u00b7 "),
+  // Library backup (Stage 11, P2)
+  backupLibrary: "Back up library",
+  backupLibraryAs: "Export library\u2026",
+  backupSaved: (h: number, a: number, b: number, path: string, encrypted: boolean) =>
+    `Backed up ${h} connection${h === 1 ? "" : "s"}, ${a} account${a === 1 ? "" : "s"}, ${b} bookmark${b === 1 ? "" : "s"} to ${path}` +
+    (encrypted ? " (encrypted)" : ""),
+  backupNeedsUnlock: "Enter the passphrase before backing the library up",
+  // Lock the library (Stage 11, answer to Stage 10 open question 1)
+  lockLibrary: "Lock library",
+  lockNeedsEncryption: "Turn on Encrypt data first",
+  // Restore local shells (Stage 11, P3)
+  restoreLocal: "Restore local shells too",
+  restoreLocalHint: "Reopens the Localhost tabs of the previous run.",
+  restoreNeedsHosts: "Turn on Restore hosts on startup first",
   darkTheme: "Dark theme",
   labelTerminalBackground: "Terminal background",
   labelTerminalFont: "Terminal font",

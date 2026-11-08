@@ -188,6 +188,15 @@ export function PreferencesModal() {
                 onChange={(v) => updateSettings({ restoreHosts: v })}
               />
               <Check
+                testId="prefs-restore-local"
+                label={strings.restoreLocal}
+                hint={strings.restoreLocalHint}
+                disabled={!settings.restoreHosts}
+                disabledTitle={strings.restoreNeedsHosts}
+                checked={settings.restoreLocalhost}
+                onChange={(v) => updateSettings({ restoreLocalhost: v })}
+              />
+              <Check
                 key={`sync-${sync.tick}`}
                 testId="prefs-sync-config"
                 label={strings.syncSshConfig}

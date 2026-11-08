@@ -26,14 +26,20 @@ const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(
 /**
  * Entries whose host still exists, in the order they were saved. A name that
  * is gone is skipped (the user deleted the connection), and a tabCount above
- * MAX_RESTORE_TABS_PER_HOST is clamped down.
+ * MAX_RESTORE_TABS_PER_HOST is clamped down. `includeLocal` (Stage 11, P3)
+ * also lets the in-memory Localhost through; without it a saved "Localhost"
+ * entry opens nothing, as in Stage 8.
  */
-export function restorePlan(openedHosts: readonly OpenedHostState[], hosts: readonly Host[]): RestoreEntry[] {
+export function restorePlan(
+  openedHosts: readonly OpenedHostState[],
+  hosts: readonly Host[],
+  includeLocal = false,
+): RestoreEntry[] {
   const out: RestoreEntry[] = [];
   for (const entry of openedHosts) {
     const name = entry.hostName?.trim();
     if (!name) continue;
-    const host = hosts.find((h) => h.name === name && h.local !== true);
+    const host = hosts.find((h) => h.name === name && (includeLocal || h.local !== true));
     if (!host) continue;
     if (!Number.isFinite(entry.tabCount) || entry.tabCount < 1) continue;
     out.push({ host, tabCount: Math.min(entry.tabCount, MAX_RESTORE_TABS_PER_HOST) });

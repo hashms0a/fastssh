@@ -24,6 +24,8 @@ export interface LibrarySlice {
   saveAccounts: (accounts: Account[]) => Promise<boolean>;
   saveBookmarks: (bookmarks: Bookmark[]) => Promise<boolean>;
   dismissWarnings: () => void;
+  /** Stage 11: "Lock library" puts the unlock modal back up (R6). */
+  setLocked: (locked: boolean) => void;
 }
 
 /**
@@ -91,6 +93,7 @@ export const createLibrarySlice: StateCreator<AppStore, [], [], LibrarySlice> = 
     saveAccounts: (accounts) => saveAccounts(set, get, accounts),
     saveBookmarks: (bookmarks) => saveBookmarks(set, get, bookmarks),
     dismissWarnings: () => set({ warnings: [] }),
+    setLocked: (locked) => set({ locked }),
   };
 };
 

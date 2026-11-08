@@ -3,6 +3,7 @@ import {
   cancelUnlock,
   disableEncryption,
   enableEncryption,
+  lockLibrary,
   startEmptyLibrary,
   unlockLibrary,
   type EncryptDeps,
@@ -191,5 +192,26 @@ describe("disableEncryption", () => {
     expect(result.outcome).toBe("wrong");
     expect(result.message).toContain("Wrong passphrase");
     expect(d.setFlag).not.toHaveBeenCalled();
+  });
+});
+
+describe("lockLibrary (Stage 11, Stage 10 open question 1)", () => {
+  it("drops the passphrase and puts the unlock modal back up", async () => {
+    const lock = vi.fn().mockResolvedValue(undefined);
+    const setLocked = vi.fn();
+    const log = vi.fn();
+    expect(await lockLibrary({ lock, setLocked, log })).toBe(true);
+    expect(lock).toHaveBeenCalledTimes(1);
+    expect(setLocked).toHaveBeenCalledWith(true);
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("a failed lock leaves the library unlocked and logs the error", async () => {
+    const lock = vi.fn().mockRejectedValue({ code: "io", message: "no" });
+    const setLocked = vi.fn();
+    const log = vi.fn();
+    expect(await lockLibrary({ lock, setLocked, log })).toBe(false);
+    expect(setLocked).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith("lock_library failed", expect.objectContaining({ code: "io" }));
   });
 });

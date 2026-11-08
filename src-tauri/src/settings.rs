@@ -27,6 +27,8 @@ pub struct AppSettings {
     pub terminal_font_size: u32,
     pub use_dark_theme: bool,
     pub restore_hosts: bool,
+    /// Stage 11 (P3): also reopen the Localhost tabs of the previous run.
+    pub restore_localhost: bool,
     pub sync_ssh_config: bool,
     pub encrypt_data: bool,
     pub scrollback_lines: i32,
@@ -50,6 +52,7 @@ impl Default for AppSettings {
             terminal_font_size: 13,
             use_dark_theme: true,
             restore_hosts: false,
+            restore_localhost: false,
             sync_ssh_config: false,
             encrypt_data: false,
             scrollback_lines: -1,
@@ -108,6 +111,7 @@ pub fn settings_from_value(v: Value) -> AppSettings {
         terminal_font_size: u(o, "terminalFontSize", d.terminal_font_size, 6, 48),
         use_dark_theme: b(o, "useDarkTheme", d.use_dark_theme),
         restore_hosts: b(o, "restoreHosts", d.restore_hosts),
+        restore_localhost: b(o, "restoreLocalhost", d.restore_localhost),
         sync_ssh_config: b(o, "syncSshConfig", d.sync_ssh_config),
         encrypt_data: b(o, "encryptData", d.encrypt_data),
         scrollback_lines: if sb < 0 {
@@ -209,6 +213,19 @@ mod tests {
     #[test]
     fn non_object_file_uses_defaults() {
         assert_eq!(settings_from_value(json!([1, 2])), AppSettings::default());
+    }
+
+    #[test]
+    fn restore_localhost_defaults_off_and_survives_a_round_trip() {
+        assert!(!settings_from_value(json!({})).restore_localhost);
+        assert!(settings_from_value(json!({"restoreLocalhost": true})).restore_localhost);
+        // A wrong type is the default, not a crash.
+        assert!(!settings_from_value(json!({"restoreLocalhost": "yes"})).restore_localhost);
+        // A file written before Stage 11 has no key and still parses.
+        let s = settings_from_value(json!({"restoreHosts": true, "windowWidth": 900}));
+        assert!(s.restore_hosts);
+        assert!(!s.restore_localhost);
+        assert_eq!(s.window_width, 900);
     }
 
     #[test]

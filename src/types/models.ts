@@ -63,6 +63,8 @@ export interface AppSettings {
   terminalFontSize: number;
   useDarkTheme: boolean;
   restoreHosts: boolean;
+  /** Stage 11 (P3): also reopen the Localhost tabs of the previous run. */
+  restoreLocalhost: boolean;
   syncSshConfig: boolean;
   encryptData: boolean;
   scrollbackLines: number;
@@ -84,6 +86,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   terminalFontSize: 13,
   useDarkTheme: true,
   restoreHosts: false,
+  restoreLocalhost: false,
   syncSshConfig: false,
   encryptData: false,
   scrollbackLines: -1,

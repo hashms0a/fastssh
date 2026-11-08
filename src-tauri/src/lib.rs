@@ -2,6 +2,7 @@ pub mod commands;
 pub mod crypto;
 pub mod env_sanitize;
 pub mod error;
+pub mod export;
 pub mod file_browser;
 pub mod gpg;
 pub mod hosts_folder;
@@ -85,8 +86,10 @@ pub fn run() {
             commands::crypto::crypto_info,
             commands::crypto::unlock_library,
             commands::crypto::set_encryption,
+            commands::crypto::lock_library,
             commands::crypto::start_empty_library,
             commands::crypto::import_easyssh,
+            commands::export::export_library,
             commands::session::spawn_session,
             commands::session::write_pty,
             commands::session::resize_pty,

@@ -328,9 +328,15 @@ Acceptance (one row per bullet):
 1. Should FastSSH get a "Lock library now" action (drop the passphrase from
    `AppState` and show the unlock modal again)? The spec never asks for it, and
    Stage 10 keeps the passphrase until quit.
+   - See what is the best option.
 2. After a successful import, should the legacy files be renamed (e.g.
    `hosts.json.imported`)? R5 says FastSSH must never write to
    `~/.config/easyssh`, so Stage 10 leaves them; the user can import twice.
+   - No.
 3. Stage 11 is "optional, P1 -> P3": which enhancement items do you want, and
    in what order? The plan's list is the default; say "all" or name the ones to
    skip.
+   - Do those: P2 Tab reorder by drag and rename on a tab double-click (titles stored on
+     the tab only, not persisted).
+     P2 Export/backup the library to a single JSON file (plain or gpg).
+     P3 Restore Localhost tabs too (a setting).

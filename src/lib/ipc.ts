@@ -55,6 +55,15 @@ export interface ImportReport {
   warnings: string[];
 }
 
+/** Stage 11 (P2): one backup copy of the library (Rust export::ExportReport). */
+export interface ExportReport {
+  path: string;
+  encrypted: boolean;
+  hosts: number;
+  accounts: number;
+  bookmarks: number;
+}
+
 /** The result of enabling sync; `hosts` is the library including the imports. */
 export interface SyncReport {
   backupPath: string | null;
@@ -109,6 +118,12 @@ export const ipc = {
     invoke<void>("set_encryption", { enabled, passphrase }),
   startEmptyLibrary: (): Promise<LoadReport> => invoke<LoadReport>("start_empty_library"),
   importEasyssh: (): Promise<ImportReport> => invoke<ImportReport>("import_easyssh"),
+  /** Stage 11: drop the passphrase from Rust memory; the UI shows unlock again. */
+  lockLibrary: () => invoke<void>("lock_library"),
+
+  // Stage 11 (P2): one backup file of the whole library, plain or gpg.
+  // `path` = null writes `<hostsFolder>/backups/fastssh-library-<utc>.json[.gpg]`.
+  exportLibrary: (path: string | null) => invoke<ExportReport>("export_library", { path }),
 
   // Stage 7: openers (R16, R12). Both resolve with the launcher that accepted
   // the URL, and reject with an AppError whose message contains the URL.

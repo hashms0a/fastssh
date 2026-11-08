@@ -19,7 +19,7 @@ export function useRestoreTabs(): void {
     started.current = true;
     const st = useAppStore.getState();
     if (!st.settings.restoreHosts || st.settings.openedHosts.length === 0 || isQuitting()) return;
-    const plan = restorePlan(st.settings.openedHosts, st.hosts);
+    const plan = restorePlan(st.settings.openedHosts, st.hosts, st.settings.restoreLocalhost);
     st.updateSettings({ openedHosts: [] });
     void st.flushSettings().catch((e) => logError("flushSettings after restore failed", e));
     void runRestore(plan, {

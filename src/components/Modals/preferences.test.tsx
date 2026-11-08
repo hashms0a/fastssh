@@ -6,6 +6,7 @@ import { ModalHost } from "./ModalHost";
 import { useAppStore } from "../../store/useAppStore";
 import { DEFAULT_SETTINGS } from "../../types/models";
 import { emptyReport, installIpcMock } from "../../test/ipcMock";
+import { strings } from "../../lib/strings";
 import type { LoadReport } from "../../lib/ipc";
 
 const NEW_FOLDER = "/home/dev/library";
@@ -86,6 +87,20 @@ describe("Preferences modal (task 8.1)", () => {
     // Garbage is refused and the field goes back to the stored value.
     expect(commit("abc").value).toBe("100000");
     expect(useAppStore.getState().settings.scrollbackLines).toBe(100000);
+  });
+
+  // Stage 11 (P3): the Localhost add-on is only reachable while Restore is on.
+  it("Restore local shells is off until Restore hosts is on", () => {
+    const spy = watchUpdates();
+    render(<PreferencesModal />);
+    const local = screen.getByTestId("prefs-restore-local") as HTMLInputElement;
+    expect(local.disabled).toBe(true);
+    expect(local.title).toBe(strings.restoreNeedsHosts);
+    fireEvent.click(screen.getByTestId("prefs-restore-hosts"));
+    const again = screen.getByTestId("prefs-restore-local") as HTMLInputElement;
+    expect(again.disabled).toBe(false);
+    fireEvent.click(again);
+    expect(spy).toHaveBeenCalledWith({ restoreLocalhost: true });
   });
 
   it("General: Restore toggles; Encrypt opens the passphrase modal", () => {

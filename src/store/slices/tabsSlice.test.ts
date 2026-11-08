@@ -27,6 +27,54 @@ const tab = (id: string, hostId: string, over: Partial<TerminalTab> = {}): Termi
   ...over,
 });
 
+describe("Stage 11: reorder and rename", () => {
+  const three = () => {
+    const s = makeStore();
+    const st = s.getState();
+    st.addTab(tab("a", "h1"));
+    st.addTab(tab("b", "h1"));
+    st.addTab(tab("c", "h1"));
+    return s;
+  };
+
+  it("a drop moves the dragged tab into the target's slot", () => {
+    const s = three();
+    s.getState().moveTab("h1", "c", "a");
+    expect(tabIdsOf(s.getState(), "h1")).toEqual(["c", "a", "b"]);
+    s.getState().moveTab("h1", "c", "b");
+    expect(tabIdsOf(s.getState(), "h1")).toEqual(["a", "b", "c"]);
+  });
+
+  it("reorder keeps the active tab and ignores a drop from another host", () => {
+    const s = three();
+    s.getState().setActiveTab("h1", "b");
+    s.getState().moveTab("h1", "a", "c");
+    expect(tabIdsOf(s.getState(), "h1")).toEqual(["b", "c", "a"]);
+    expect(activeTabOf(s.getState(), "h1")).toBe("b");
+    s.getState().moveTab("h1", "zz", "a"); // an id of another notebook
+    expect(tabIdsOf(s.getState(), "h1")).toEqual(["b", "c", "a"]);
+  });
+
+  it("renaming a tab changes only that tab's title", () => {
+    const s = three();
+    s.getState().renameTab("b", "  build box  ");
+    expect(s.getState().tabs.b?.title).toBe("build box");
+    expect(s.getState().tabs.a?.title).toBe("a");
+    s.getState().renameTab("b", "   "); // empty keeps the old title
+    expect(s.getState().tabs.b?.title).toBe("build box");
+    s.getState().renameTab("zz", "x"); // unknown tab id
+    expect(s.getState().tabs.zz).toBeUndefined();
+  });
+
+  it("a rename does not touch the order or the unread flags", () => {
+    const s = three();
+    s.getState().setTabUnread("b", true);
+    s.getState().renameTab("b", "deploy");
+    expect(tabIdsOf(s.getState(), "h1")).toEqual(["a", "b", "c"]);
+    expect(s.getState().tabs.b).toMatchObject({ title: "deploy", unread: true });
+  });
+});
+
 describe("tabsSlice", () => {
   it("adds tabs per host and activates the newest", () => {
     const s = makeStore();

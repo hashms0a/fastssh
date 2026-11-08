@@ -4,6 +4,7 @@ import { strings } from "../lib/strings";
 import { quitNow } from "../lib/quitActions";
 import { addHost } from "../lib/editorActions";
 import { importEasysshNow } from "../lib/importActions";
+import { backupNow, backupToPickedFile, lockLibraryNow } from "../lib/backupActions";
 import { openLocalShell } from "../terminal/sessionController";
 import { useAppStore } from "../store/useAppStore";
 import { ContextMenu } from "./ContextMenu";
@@ -20,6 +21,8 @@ export function HeaderBar() {
   const openPreferences = useAppStore((s) => s.openPreferences);
   const openAbout = useAppStore((s) => s.openAbout);
   const legacyAvailable = useAppStore((s) => s.legacyAvailable);
+  const locked = useAppStore((s) => s.locked);
+  const encryptData = useAppStore((s) => s.settings.encryptData);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [popover, setPopover] = useState<{ x: number; y: number } | null>(null);
 
@@ -111,6 +114,24 @@ export function HeaderBar() {
               run: () => void importEasysshNow(),
               disabled: !legacyAvailable,
               title: legacyAvailable ? undefined : strings.noEasysshData,
+            },
+            {
+              label: strings.backupLibrary,
+              run: () => void backupNow(),
+              disabled: locked,
+              title: locked ? strings.backupNeedsUnlock : undefined,
+            },
+            {
+              label: strings.backupLibraryAs,
+              run: () => void backupToPickedFile(),
+              disabled: locked,
+              title: locked ? strings.backupNeedsUnlock : undefined,
+            },
+            {
+              label: strings.lockLibrary,
+              run: () => void lockLibraryNow(),
+              disabled: !encryptData || locked,
+              title: encryptData ? undefined : strings.lockNeedsEncryption,
             },
             { label: strings.about, run: openAbout },
             { label: strings.quit, run: () => void quitNow() },
