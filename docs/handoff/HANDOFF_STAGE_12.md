@@ -88,6 +88,11 @@ Modified:
 - **Tab bar layout.** `HostNotebook` renders an outer flex row; the `tab-bar`
   (role=tablist) is the scroll container with `min-w-0 flex-1 overflow-x-auto`,
   tabs are `shrink-0`, and the "+" button is a sibling outside the strip.
+- **The AppImage is smoke-tested by the build script.** It launches the packed
+  AppImage in the sandbox for ~14 s and fails the build if the log contains
+  `asset not found`, `panicked` or `symbol lookup error`. That check earned its
+  place: one build embedded `dist/` while the frontend build was still writing
+  it, and the AppImage opened a webview showing only `asset not found: index.html`.
 - **Release packaging.** Tauri's AppImage config has no desktop template, so the
   build script patches `FastSSH.desktop` in the AppDir (root **and**
   `usr/share/applications/`, which is the copy appimagetool uses) and re-runs
@@ -181,6 +186,7 @@ objdump -T .../usr/bin/fastssh | grep -o 'GLIBC_[0-9.]*' | sort -V | tail -1
   → GLIBC_2.34          (acceptance: <= 2.35)
 grep -c __fastsshTest  usr/bin/fastssh      → 0
 FastSSH.desktop: Name=FastSSH, Categories=Network;RemoteAccess;TerminalEmulator;
+AppImage smoke (in the script): launched, assets loaded, no panic
 ./tools/dev-sandbox.sh appimage            → window renders, screenshot
 ./tools/dev-sandbox.sh appimage-extract    → window renders, screenshot
 ```

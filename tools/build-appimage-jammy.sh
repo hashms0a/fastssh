@@ -66,6 +66,23 @@ cp -f "$APPDIR"/*.AppImage dist-release/
 echo "copied:"
 ls -lh dist-release/
 
+# Smoke check: the packed binary must really load its embedded frontend. A
+# frontend that was mid-write while tauri-build embedded the assets produces an
+# AppImage whose webview shows "asset not found: index.html".
+T="${FASTSSH_TESTENV:-$HOME/fastssh-testenv}"
+SMOKE=/tmp/fastssh-appimage-smoke.log
+FASTSSH_CONFIG_DIR="$T/config" FASTSSH_SSH_DIR="$T/ssh" FASTSSH_LEGACY_DIR="$T/legacy" \
+  APPIMAGE_EXTRACT_AND_RUN=1 timeout 25 ./dist-release/FastSSH_1.0.0_amd64.AppImage > "$SMOKE" 2>&1 &
+sleep 14
+pkill -x fastssh 2>/dev/null || true
+wait 2>/dev/null || true
+if grep -qE "asset not found|panicked|symbol lookup error" "$SMOKE"; then
+  echo "AppImage smoke FAILED; last lines of $SMOKE:"
+  grep -E "asset not found|panicked|symbol lookup error" "$SMOKE" | head -3
+  exit 1
+fi
+echo "AppImage smoke: window loaded its assets (no asset-not-found, no panic)"
+
 # The acceptance check (plan 12.9): the binary must not need a newer glibc
 # than the AppImage ships. Extract the ELF and read its GLIBC symbol versions.
 BIN=$(find "$APPDIR" -maxdepth 5 -name fastssh -type f | head -1)
