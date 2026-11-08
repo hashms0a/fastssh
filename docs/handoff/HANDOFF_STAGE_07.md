@@ -260,5 +260,8 @@ Check on a real device (`[human]`, all in `docs/MANUAL_CHECKS.md`)
 - When every launcher fails, should FastSSH also try `gio mount <url>` (GVFS)
   before the copy-address toast? It needs the user to type the password in a
   terminal or a portal dialog, which the app cannot drive.
+  See what is the best option.
+
 - Should "Run" keep the popover open so several bookmarks can be run in a row
   (it currently closes it so the terminal output is visible)?
+  No.

@@ -21,6 +21,9 @@ export interface Entry {
   last: LastCommandTracker;
   host: HTMLDivElement;
   opened: boolean;
+  /** Which library record this tab belongs to (task 8.2: its color/font
+   *  overrides survive a Preferences change). Empty only in tests. */
+  hostId: string;
 }
 
 export interface TerminalHooks {
@@ -31,7 +34,7 @@ export interface TerminalHooks {
 const entries = new Map<string, Entry>();
 
 /** Idempotent: calling it twice for the same tab returns the existing entry. */
-export function createTerminal(tabId: string, opts: ITerminalOptions, hooks: TerminalHooks = {}): Entry {
+export function createTerminal(tabId: string, opts: ITerminalOptions, hostId = "", hooks: TerminalHooks = {}): Entry {
   const existing = entries.get(tabId);
   if (existing) return existing;
   const term = new Terminal({ allowProposedApi: true, ...opts });
@@ -49,7 +52,7 @@ export function createTerminal(tabId: string, opts: ITerminalOptions, hooks: Ter
   if (hooks.onBell) term.onBell(hooks.onBell);
   const host = document.createElement("div");
   host.className = "h-full w-full";
-  const entry: Entry = { term, fit, search, last: new LastCommandTracker(term), host, opened: false };
+  const entry: Entry = { term, fit, search, last: new LastCommandTracker(term), host, opened: false, hostId };
   entries.set(tabId, entry);
   return entry;
 }
@@ -102,6 +105,9 @@ export function getText(tabId: string): string {
 }
 
 export const getEntry = (tabId: string): Entry | undefined => entries.get(tabId);
+
+/** Task 8.2: every open tab, for a live Preferences change. */
+export const entryIds = (): string[] => [...entries.keys()];
 
 /** Test hook (task 6.6/6.10): scroll position and the Alt+Up marker line. */
 export const viewportY = (tabId: string): number => entries.get(tabId)?.term.buffer.active?.viewportY ?? -1;

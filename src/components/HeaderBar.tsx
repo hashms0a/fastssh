@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Bookmark, EllipsisVertical, Plus, TerminalSquare } from "lucide-react";
 import { strings } from "../lib/strings";
-import { ipc } from "../lib/ipc";
-import { logError } from "../lib/log";
+import { quitNow } from "../lib/quitActions";
 import { addHost } from "../lib/editorActions";
 import { openLocalShell } from "../terminal/sessionController";
 import { useAppStore } from "../store/useAppStore";
@@ -17,6 +16,8 @@ import { BookmarksPopover } from "./BookmarksPopover";
 export function HeaderBar() {
   const filter = useAppStore((s) => s.filter);
   const setFilter = useAppStore((s) => s.setFilter);
+  const openPreferences = useAppStore((s) => s.openPreferences);
+  const openAbout = useAppStore((s) => s.openAbout);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [popover, setPopover] = useState<{ x: number; y: number } | null>(null);
 
@@ -102,10 +103,10 @@ export function HeaderBar() {
           testId="header-menu-list"
           onClose={() => setMenu(null)}
           items={[
-            { label: strings.preferences, run: () => undefined, disabled: true, title: strings.comingSoon },
+            { label: strings.preferences, run: openPreferences },
             { label: strings.importEasyssh, run: () => undefined, disabled: true, title: strings.comingSoon },
-            { label: strings.about, run: () => undefined, disabled: true, title: strings.comingSoon },
-            { label: strings.quit, run: () => ipc.quit().catch((e) => logError("quit_app failed", e)) },
+            { label: strings.about, run: openAbout },
+            { label: strings.quit, run: () => void quitNow() },
           ]}
         />
       )}

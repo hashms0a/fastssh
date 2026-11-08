@@ -162,7 +162,7 @@ export async function connectHost(host: Host): Promise<void> {
     exited: false,
     exitCode: null,
   });
-  createTerminal(tabId, terminalOptions(host, st.settings), {
+  createTerminal(tabId, terminalOptions(host, st.settings), host.id, {
     // R12: the audible bell follows settings.audibleBell, read at ring time.
     onBell: () => ringBell(() => useAppStore.getState().settings.audibleBell),
   });

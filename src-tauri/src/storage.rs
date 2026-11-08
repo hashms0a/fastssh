@@ -164,6 +164,54 @@ fn ensure_file_mode(path: &std::path::Path) {
     }
 }
 
+/// Read the three library files of one folder.
+fn read_library(
+    dir: &std::path::Path,
+    warnings: &mut Vec<String>,
+) -> (Vec<Host>, Vec<Account>, Vec<Bookmark>) {
+    for name in ["hosts.json", "accounts.json", "bookmarks.json"] {
+        ensure_file_mode(&dir.join(name));
+    }
+    let mut hosts = vec![];
+    for v in read_array(&dir.join("hosts.json"), warnings) {
+        if let Some(h) = models::host_from_value(&v, warnings) {
+            hosts.push(h);
+        }
+    }
+    let mut accounts = vec![];
+    for v in read_array(&dir.join("accounts.json"), warnings) {
+        if let Some(a) = models::account_from_value(&v, warnings) {
+            accounts.push(a);
+        }
+    }
+    let mut bookmarks = vec![];
+    for v in read_array(&dir.join("bookmarks.json"), warnings) {
+        if let Some(b) = models::bookmark_from_value(&v, warnings) {
+            bookmarks.push(b);
+        }
+    }
+    (hosts, accounts, bookmarks)
+}
+
+/// The library of one folder under the given settings (task 8.3 also uses
+/// this, for the folder the user just picked).
+pub fn report_from(dir: &std::path::Path, settings: AppSettings) -> LoadReport {
+    let mut warnings = vec![];
+    let (hosts, accounts, bookmarks) = read_library(dir, &mut warnings);
+    for w in &warnings {
+        log::warn!("load: {w}");
+    }
+    LoadReport {
+        hosts,
+        accounts,
+        bookmarks,
+        settings,
+        warnings,
+        locked: false, // Stage 10: true when a *.json.gpg needs unlocking
+        legacy_available: paths::legacy_dir().join("hosts.json").exists(),
+    }
+}
+
 pub fn load_all() -> LoadReport {
     let mut warnings = vec![];
     let config_dir = match ensure_config_dir() {
@@ -176,39 +224,12 @@ pub fn load_all() -> LoadReport {
     ensure_file_mode(&config_dir.join("settings.json"));
     let settings = load_settings_with_warnings(&mut warnings);
     let dir = data_dir_for(&settings.hosts_folder, &config_dir, &mut warnings);
-    for name in ["hosts.json", "accounts.json", "bookmarks.json"] {
-        ensure_file_mode(&dir.join(name));
-    }
-    let mut hosts = vec![];
-    for v in read_array(&dir.join("hosts.json"), &mut warnings) {
-        if let Some(h) = models::host_from_value(&v, &mut warnings) {
-            hosts.push(h);
-        }
-    }
-    let mut accounts = vec![];
-    for v in read_array(&dir.join("accounts.json"), &mut warnings) {
-        if let Some(a) = models::account_from_value(&v, &mut warnings) {
-            accounts.push(a);
-        }
-    }
-    let mut bookmarks = vec![];
-    for v in read_array(&dir.join("bookmarks.json"), &mut warnings) {
-        if let Some(b) = models::bookmark_from_value(&v, &mut warnings) {
-            bookmarks.push(b);
-        }
-    }
-    for w in &warnings {
+    let mut report = report_from(&dir, settings);
+    report.warnings.extend(warnings);
+    for w in &report.warnings {
         log::warn!("load_all: {w}");
     }
-    LoadReport {
-        hosts,
-        accounts,
-        bookmarks,
-        settings,
-        warnings,
-        locked: false, // Stage 10: true when a *.json.gpg needs unlocking
-        legacy_available: paths::legacy_dir().join("hosts.json").exists(),
-    }
+    report
 }
 
 fn write_array<T>(

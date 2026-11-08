@@ -3,6 +3,7 @@
 
 use crate::AppState;
 use crate::error::AppError;
+use crate::hosts_folder;
 use crate::models::{Account, Bookmark, Host};
 use crate::settings::AppSettings;
 use crate::storage::{self, LoadReport};
@@ -59,4 +60,28 @@ pub async fn save_settings(
 
 fn lock_err(e: std::sync::PoisonError<std::sync::MutexGuard<'_, AppSettings>>) -> AppError {
     AppError::new("state", format!("settings mutex poisoned: {e}"))
+}
+
+/// Task 8.3: whether the folder the user typed already holds a library, so
+/// the modal can ask "Load it?" instead of "Copy the current library there?".
+/// Read-only: it never creates the folder.
+#[tauri::command]
+pub async fn folder_has_library(path: String) -> Result<bool, AppError> {
+    blocking(move || Ok(hosts_folder::has_library(&path))).await
+}
+
+/// Task 8.3: load the library of that folder, or copy the current one into
+/// it. The settings file is written by `save_settings` (the frontend owns the
+/// single settings writer); only the in-memory copy is updated here so a
+/// library save right after the change lands in the new folder.
+#[tauri::command]
+pub async fn set_hosts_folder(
+    state: State<'_, AppState>,
+    path: String,
+    mode: String,
+) -> Result<LoadReport, AppError> {
+    let current = state.settings.lock().map_err(lock_err)?.clone();
+    let report = blocking(move || hosts_folder::set_hosts_folder(&current, &path, &mode)).await?;
+    *state.settings.lock().map_err(lock_err)? = report.settings.clone();
+    Ok(report)
 }

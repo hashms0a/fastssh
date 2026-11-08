@@ -46,6 +46,9 @@ export interface UiSlice {
   toasts: Toast[];
   /** Open editor (EditorOverlay), null = no editor. */
   editor: EditorRequest | null;
+  /** Stage 8 modal overlays; the two are mutually exclusive. */
+  preferencesOpen: boolean;
+  aboutOpen: boolean;
   searchOpen: boolean;
   search: SearchState;
   /** False when the OS window is not focused (R13 unread rule). */
@@ -56,6 +59,10 @@ export interface UiSlice {
   setFilter: (filter: string) => void;
   openEditor: (req: EditorRequest) => void;
   closeEditor: () => void;
+  openPreferences: () => void;
+  closePreferences: () => void;
+  openAbout: () => void;
+  closeAbout: () => void;
   /** Closing the toolbar drops the query and the counters (Escape, task 6.5). */
   setSearchOpen: (open: boolean) => void;
   patchSearch: (patch: Partial<SearchState>) => void;
@@ -75,6 +82,8 @@ export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set, get)
   filter: "",
   toasts: [],
   editor: null,
+  preferencesOpen: false,
+  aboutOpen: false,
   searchOpen: false,
   search: SEARCH_DEFAULT,
   windowFocused: true,
@@ -84,6 +93,10 @@ export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set, get)
   setFilter: (filter) => set({ filter }),
   openEditor: (req) => set({ editor: req }),
   closeEditor: () => set({ editor: null }),
+  openPreferences: () => set({ preferencesOpen: true, aboutOpen: false }),
+  closePreferences: () => set({ preferencesOpen: false }),
+  openAbout: () => set({ aboutOpen: true, preferencesOpen: false }),
+  closeAbout: () => set({ aboutOpen: false }),
   setSearchOpen: (open) => set(open ? { searchOpen: true } : { searchOpen: false, search: SEARCH_DEFAULT }),
   patchSearch: (patch) => set({ search: { ...get().search, ...patch } }),
   setWindowFocused: (focused) => set({ windowFocused: focused }),

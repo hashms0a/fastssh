@@ -2,6 +2,7 @@ pub mod commands;
 pub mod env_sanitize;
 pub mod error;
 pub mod file_browser;
+pub mod hosts_folder;
 pub mod models;
 pub mod paths;
 pub mod pty_manager;
@@ -70,6 +71,8 @@ pub fn run() {
             commands::library::save_accounts,
             commands::library::save_bookmarks,
             commands::library::save_settings,
+            commands::library::folder_has_library,
+            commands::library::set_hosts_folder,
             commands::session::spawn_session,
             commands::session::write_pty,
             commands::session::resize_pty,

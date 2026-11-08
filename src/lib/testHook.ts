@@ -27,6 +27,14 @@ export interface FastSSHTestHook {
   isFullscreen(): Promise<boolean>;
   /** Clipboard text, for the Alt+C / Ctrl+Shift+C assertions. */
   readClipboard(): Promise<string>;
+  /** Task 8.2: what the Preferences change put into this tab's xterm. */
+  appearance(tabId: string): {
+    fontFamily: string;
+    fontSize: number;
+    scrollback: number;
+    background: string;
+    rows: number;
+  } | null;
 }
 
 export const testHook: FastSSHTestHook = {
@@ -45,6 +53,17 @@ export const testHook: FastSSHTestHook = {
   viewportY: (tabId) => viewportY(tabId),
   markerLine: (tabId) => markerLine(tabId),
   unread: (tabId) => useAppStore.getState().tabs[tabId]?.unread === true,
+  appearance: (tabId) => {
+    const term = getEntry(tabId)?.term;
+    if (!term) return null;
+    return {
+      fontFamily: term.options.fontFamily ?? "",
+      fontSize: term.options.fontSize ?? 0,
+      scrollback: term.options.scrollback ?? 0,
+      background: term.options.theme?.background ?? "",
+      rows: term.rows,
+    };
+  },
   isFullscreen: () => getCurrentWindow().isFullscreen(),
   readClipboard: () => readClipboard(),
 };

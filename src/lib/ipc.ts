@@ -29,6 +29,9 @@ export interface LoadReport {
   legacyAvailable: boolean;
 }
 
+/** Task 8.3: read that folder's library, or write the current one into it. */
+export type FolderMode = "load" | "copy";
+
 /** Typed wrappers over Tauri commands, one per command. */
 export const ipc = {
   getRuntimeInfo: async (): Promise<RuntimeInfo> => {
@@ -48,6 +51,10 @@ export const ipc = {
   saveAccounts: (accounts: Account[]) => invoke<void>("save_accounts", { accounts }),
   saveBookmarks: (bookmarks: Bookmark[]) => invoke<void>("save_bookmarks", { bookmarks }),
   saveSettings: (settings: AppSettings) => invoke<void>("save_settings", { settings }),
+
+  // Stage 8 (task 8.3): moving the library to another folder.
+  folderHasLibrary: (path: string) => invoke<boolean>("folder_has_library", { path }),
+  setHostsFolder: (path: string, mode: FolderMode) => invoke<LoadReport>("set_hosts_folder", { path, mode }),
 
   // Sessions (Stage 4). Rust accepts only host.local === true for now.
   spawnSession: (sessionId: string, host: Host, syncSshConfig: boolean, cols: number, rows: number) =>

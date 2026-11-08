@@ -95,6 +95,13 @@ declare global {
       unread(tabId: string): boolean;
       isFullscreen(): Promise<boolean>;
       readClipboard(): Promise<string>;
+      appearance(tabId: string): {
+        fontFamily: string;
+        fontSize: number;
+        scrollback: number;
+        background: string;
+        rows: number;
+      };
     };
     __TAURI_INTERNALS__?: { invoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> };
   }
@@ -130,6 +137,42 @@ export const hookFullscreen = async (): Promise<boolean> =>
 /** Clipboard text as the app's own clipboard plugin sees it. */
 export const hookClipboard = async (): Promise<string> =>
   (await browser.execute(async () => await (window.__fastsshTest?.readClipboard() ?? Promise.resolve("")))) as string;
+
+/** Task 8.2: the look a tab's xterm holds right now (font, size, scrollback,
+ *  background), i.e. what a Preferences change must have written. */
+export interface TermAppearance {
+  fontFamily: string;
+  fontSize: number;
+  scrollback: number;
+  background: string;
+  rows: number;
+}
+
+export const hookAppearance = async (tabId: string): Promise<TermAppearance | null> =>
+  (await browser.execute((id) => window.__fastsshTest?.appearance(id) ?? null, tabId)) as TermAppearance | null;
+
+/** Rows of the terminal (task 8.1 acceptance: scrollback + rows). */
+export const hookRows = async (tabId: string): Promise<number> =>
+  (await browser.execute((id) => window.__fastsshTest?.appearance(id)?.rows ?? 0, tabId)) as number;
+
+/** Total buffer lines, viewport included. */
+export const hookBufferLength = async (tabId: string): Promise<number> =>
+  (await browser.execute((id) => window.__fastsshTest?.bufferLength(id) ?? 0, tabId)) as number;
+
+/** settings.json as the app wrote it (restore, quit flow). */
+export function readSettings(): Record<string, unknown> {
+  const file = path.join(configDir, "settings.json");
+  return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+}
+
+export function openedHostsFromDisk(): Array<{ hostName: string; tabCount: number }> {
+  const v = readSettings()["openedHosts"];
+  return Array.isArray(v) ? (v as Array<{ hostName: string; tabCount: number }>) : [];
+}
+
+/** The <html> class list, for the dark-theme assertion (R18). */
+export const htmlClasses = async (): Promise<string[]> =>
+  (await browser.execute(() => [...document.documentElement.classList])) as string[];
 
 export const domTabIds = async (): Promise<string[]> => {
   const ids: string[] = [];
@@ -310,6 +353,44 @@ export async function typeInto(testId: string, text: string): Promise<void> {
   }
 }
 
+/** Replace a text field's content (a Preferences field commits on blur or
+ *  Enter and reads the DOM value, so no keystrokes are needed). */
+export async function setFieldValue(testId: string, value: string): Promise<void> {
+  await (await byTestId(testId)).waitForExist({ timeout: 5000 });
+  await browser.execute(
+    (id, v) => {
+      const el = document.querySelector<HTMLInputElement>(`[data-testid="${id}"]`);
+      if (!el) return;
+      el.value = v;
+      el.focus();
+    },
+    testId,
+    value,
+  );
+  await browser.pause(120);
+}
+
+/**
+ * Set a controlled React input the way a real edit does: the native setter
+ * first (otherwise React's value tracker sees no change), then the input
+ * event React listens for.
+ */
+export async function setInputValue(testId: string, value: string): Promise<void> {
+  await (await byTestId(testId)).waitForExist({ timeout: 5000 });
+  await browser.execute(
+    (id, v) => {
+      const el = document.querySelector<HTMLInputElement>(`[data-testid="${id}"]`);
+      if (!el) return;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(el, v);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    },
+    testId,
+    value,
+  );
+  await browser.pause(150);
+}
+
 /** Labels of the items of an open context menu. */
 export async function menuLabels(testId: string): Promise<string[]> {
   const out: string[] = [];
@@ -342,6 +423,16 @@ export async function menuItemDisabled(testId: string, label: string): Promise<b
 export async function quitApp(): Promise<void> {
   await browser.execute(() => void window.__TAURI_INTERNALS__?.invoke("quit_app"));
   await browser.pause(1200);
+}
+
+/**
+ * Ask the window to close (task 8.4: the close button runs the same flow).
+ * `core:window:allow-close` is in the capability file, so the app's own
+ * onCloseRequested handler runs and the quit flow writes openedHosts.
+ */
+export async function requestWindowClose(label = "main"): Promise<void> {
+  await browser.execute((l) => void window.__TAURI_INTERNALS__?.invoke("plugin:window|close", { label: l }), label);
+  await browser.pause(1500);
 }
 
 /** Every visible toast text (the Stage 6 shortcuts report through toasts). */

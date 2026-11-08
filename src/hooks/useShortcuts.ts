@@ -1,6 +1,6 @@
 import { useEffect } from "react";
-import { ipc } from "../lib/ipc";
 import { logError } from "../lib/log";
+import { quitNow } from "../lib/quitActions";
 import { needsSearchOpen, shortcutFor, type ShortcutAction } from "../lib/shortcuts";
 import { toggleFullscreen } from "../lib/windowOps";
 import { useAppStore, type AppStore } from "../store/useAppStore";
@@ -25,8 +25,8 @@ function run(action: ShortcutAction, st: AppStore): void {
   const hostId = st.selectedHostId;
   switch (action) {
     case "quit":
-      // Stage 8 adds the flush + confirm flow; quit_app already kills the PTYs.
-      ipc.quit().catch((e) => logError("quit_app failed", e));
+      // Task 8.4: openedHosts + flush first, then quit_app (which kills the PTYs).
+      void quitNow();
       break;
     case "new-tab":
       newTabForSelectedHost();

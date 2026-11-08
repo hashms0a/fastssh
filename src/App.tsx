@@ -5,6 +5,8 @@ import { logError } from "./lib/log";
 import { useWindowState } from "./hooks/useWindowState";
 import { useWindowFocus } from "./hooks/useWindowFocus";
 import { useCloseHandler } from "./hooks/useCloseHandler";
+import { useSettingsSync } from "./hooks/useSettingsSync";
+import { useRestoreTabs } from "./hooks/useRestoreTabs";
 import { useShortcuts } from "./hooks/useShortcuts";
 import { useAppStore } from "./store/useAppStore";
 import { HeaderBar } from "./components/HeaderBar";
@@ -13,14 +15,20 @@ import { Splitter } from "./components/Splitter";
 import { Workspace } from "./components/Workspace/Workspace";
 import { EditorOverlay } from "./components/Editors/EditorOverlay";
 import { ModalHost } from "./components/Modals/ModalHost";
+import { PreferencesModal } from "./components/Modals/PreferencesModal";
+import { AboutDialog } from "./components/Modals/AboutDialog";
 import { Toasts } from "./components/Toasts";
 
 export default function App() {
   const [info, setInfo] = useState<RuntimeInfo | null>(null);
   const panelSize = useAppStore((s) => s.settings.panelSize);
+  const preferencesOpen = useAppStore((s) => s.preferencesOpen);
+  const aboutOpen = useAppStore((s) => s.aboutOpen);
   useWindowState();
   useWindowFocus();
   useCloseHandler();
+  useSettingsSync();
+  useRestoreTabs();
   useShortcuts();
 
   useEffect(() => {
@@ -57,6 +65,9 @@ export default function App() {
         </main>
       </div>
       <ModalHost />
+      {/* Stage 8 overlays; the workspace and notebooks stay mounted behind. */}
+      {preferencesOpen && <PreferencesModal />}
+      {aboutOpen && <AboutDialog info={info} />}
       <Toasts />
     </div>
   );
