@@ -5,6 +5,7 @@ pub mod models;
 pub mod paths;
 pub mod pty_manager;
 pub mod settings;
+pub mod ssh_command;
 pub mod storage;
 pub mod utf8_chunker;
 

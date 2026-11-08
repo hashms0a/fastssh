@@ -1,5 +1,6 @@
 import { useAppStore } from "../store/useAppStore";
 import { getEntry, getText } from "../terminal/terminalRegistry";
+import { writeCount } from "../terminal/writeLog";
 
 /**
  * Read-only test hook for the e2e specs (plan Stage 4 notes). Installed only
@@ -13,6 +14,8 @@ export interface FastSSHTestHook {
   cols(tabId: string): number;
   bufferLength(tabId: string): number;
   tabIds(): string[];
+  /** How many writes to this tab equal text (Stage 5 password check). */
+  writeCount(tabId: string, text: string): number;
 }
 
 export const testHook: FastSSHTestHook = {
@@ -27,6 +30,7 @@ export const testHook: FastSSHTestHook = {
     const s = useAppStore.getState();
     return s.selectedHostId ? (s.tabOrder[s.selectedHostId] ?? []) : [];
   },
+  writeCount: (tabId, text) => writeCount(tabId, text),
 };
 
 export function installTestHook(): void {

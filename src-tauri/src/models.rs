@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Default)]
 pub struct Host {
     pub id: String,
     pub name: String,
@@ -22,6 +22,30 @@ pub struct Host {
     /// True only for the built-in in-memory Localhost; never saved to disk.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local: Option<bool>,
+}
+
+/// `Debug` is written by hand so a stray `{:?}` in a log line can never
+/// print a password (plan Stage 5 notes).
+impl std::fmt::Debug for Host {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Host")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("group", &self.group)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("username", &self.username)
+            .field("password", &"<redacted>")
+            .field("identity_file", &self.identity_file)
+            .field("account", &self.account)
+            .field("color", &self.color)
+            .field("font", &self.font)
+            .field("tunnels", &self.tunnels)
+            .field("extra_arguments", &self.extra_arguments)
+            .field("ssh_config", &self.ssh_config)
+            .field("local", &self.local)
+            .finish()
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]

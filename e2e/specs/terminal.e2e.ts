@@ -1,151 +1,36 @@
 import { execSync } from "node:child_process";
 import { expect } from "@wdio/globals";
-import { byTestId, loadFixture, shot } from "../helpers";
+import {
+  badge,
+  byTestId,
+  clickRow,
+  connectRow,
+  domTabIds,
+  doubleClickRow,
+  expectRecentLine,
+  expectText,
+  focusTerm,
+  hookTabIds,
+  landingVisible,
+  loadFixture,
+  openExtraTab,
+  quitApp,
+  readBuffer,
+  readCols,
+  selectTab,
+  shot,
+  runCommand,
+} from "../helpers";
 
 /**
  * Stage 4 acceptance: the PTY manager, host notebooks and the local shell.
- * Terminal state is read through window.__fastsshTest (built by
- * tools/build-debug.sh in Vite mode "e2e"), never from a screenshot.
+ * Terminal state is read through window.__fastsshTest (see ../helpers.ts),
+ * never from a screenshot.
  *
  * Each test starts from loadFixture("legacy"), which restarts the app: tabs
  * are in-memory, so a reload also guarantees no session leaks into the next
- * test. Keys go through browser.keys after focusing the xterm textarea, and
- * clicks are retried because a W3C click on XWayland is sometimes reported
- * before the page acted (see the notes in library.e2e.ts).
+ * test.
  */
-
-declare global {
-  interface Window {
-    __fastsshTest?: {
-      getText(tabId: string): string;
-      activeTabId(): string | null;
-      cols(tabId: string): number;
-      bufferLength(tabId: string): number;
-      tabIds(): string[];
-    };
-    __TAURI_INTERNALS__?: { invoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> };
-  }
-}
-
-const readBuffer = async (tabId: string): Promise<string> =>
-  (await browser.execute((id) => window.__fastsshTest?.getText(id) ?? "", tabId)) as string;
-
-const readCols = async (tabId: string): Promise<number> =>
-  (await browser.execute((id) => window.__fastsshTest?.cols(id) ?? 0, tabId)) as number;
-
-const hookTabIds = async (): Promise<string[]> =>
-  (await browser.execute(() => window.__fastsshTest?.tabIds() ?? [])) as string[];
-
-const domTabIds = async (): Promise<string[]> => {
-  const ids: string[] = [];
-  for (const el of await $$('[data-testid="tab"]')) ids.push((await el.getAttribute("data-tab-id")) ?? "");
-  return ids;
-};
-
-async function expectText(tabId: string, needle: string, timeout = 12000): Promise<void> {
-  await browser.waitUntil(async () => (await readBuffer(tabId)).includes(needle), { timeout, interval: 300 });
-}
-
-/** The last few non-empty buffer lines, where a fresh command's answer sits. */
-async function recentLines(tabId: string, n = 4): Promise<string[]> {
-  const lines = (await readBuffer(tabId))
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-  return lines.slice(-n);
-}
-
-async function expectRecentLine(tabId: string, value: string, timeout = 12000): Promise<void> {
-  await browser.waitUntil(async () => (await recentLines(tabId)).includes(value), { timeout, interval: 300 });
-}
-
-/** Focus the tab's xterm textarea; a click on the pane can be swallowed. */
-async function focusTerm(tabId: string): Promise<void> {
-  await browser.execute((id) => {
-    const pane = document.querySelector(`[data-testid="terminal-pane"][data-tab-id="${id}"]`);
-    const ta = pane?.querySelector(".xterm-helper-textarea") as HTMLTextAreaElement | null;
-    ta?.focus();
-  }, tabId);
-  await browser.pause(120);
-}
-
-/** Type a command line into the terminal, like a user would. */
-/** Make a tab the visible one; a hidden pane's textarea cannot take focus. */
-async function selectTab(tabId: string): Promise<void> {
-  await browser.execute((id) => {
-    document
-      .querySelector(`[data-testid="tab"][data-tab-id="${id}"]`)
-      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  }, tabId);
-  await browser.waitUntil(
-    async () => (await browser.execute(() => window.__fastsshTest?.activeTabId() ?? null)) === tabId,
-    { timeout: 6000, interval: 200 },
-  );
-  await browser.pause(250);
-}
-
-async function runCommand(tabId: string, line: string): Promise<void> {
-  await focusTerm(tabId);
-  for (const ch of line) await browser.keys([ch === " " ? "Space" : ch]);
-  await browser.keys(["Enter"]);
-}
-
-async function clickRow(name: string): Promise<void> {
-  const sel = `[data-testid="host-row"][data-name="${name}"]`;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const el = await $(sel);
-    await el.waitForExist();
-    try {
-      await el.click();
-    } catch {
-      await browser.execute((n) => {
-        const row = [...document.querySelectorAll<HTMLElement>('[data-testid="host-row"]')].find(
-          (e) => e.getAttribute("data-name") === n,
-        );
-        row?.click();
-      }, name);
-    }
-    await browser.pause(350);
-    const selected = await el.getAttribute("aria-selected");
-    if (selected === "true") return;
-  }
-}
-
-async function doubleClickRow(name: string): Promise<void> {
-  const before = (await domTabIds()).length;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const el = await $(`[data-testid="host-row"][data-name="${name}"]`);
-    await el.waitForExist();
-    try {
-      await el.doubleClick();
-    } catch {
-      await browser.execute((n) => {
-        const row = [...document.querySelectorAll<HTMLElement>('[data-testid="host-row"]')].find(
-          (e) => e.getAttribute("data-name") === n,
-        );
-        row?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
-      }, name);
-    }
-    await browser.pause(500);
-    if ((await domTabIds()).length > before) return;
-  }
-  await (await byTestId("notebook")).waitForExist();
-}
-
-async function openExtraTab(): Promise<void> {
-  const before = (await domTabIds()).length;
-  await (await byTestId("tab-new")).click();
-  await browser.waitUntil(async () => (await domTabIds()).length === before + 1, { timeout: 8000, interval: 250 });
-}
-
-async function badge(name: string): Promise<string> {
-  const el = await $(`[data-testid="host-row"][data-name="${name}"] [data-testid="host-row-badge"]`);
-  return (await el.isExisting()) ? await el.getText() : "";
-}
-
-async function landingVisible(): Promise<boolean> {
-  return (await byTestId("landing-connect")).isExisting();
-}
 
 const orphanLines = (): string[] => {
   try {
@@ -248,10 +133,8 @@ describe("terminal tabs + local shell (Stage 4)", () => {
   // Test 4: task 4.12 - a clean exit closes the tab, the landing returns.
   it("exit closes the tab and the landing card comes back", async () => {
     await loadFixture("legacy");
-    await clickRow("Localhost");
-    await (await byTestId("landing-connect")).click();
-    const [tabId] = await hookTabIds();
-    await runCommand(tabId!, "exit");
+    const tabId = await connectRow("Localhost");
+    await runCommand(tabId, "exit");
     await browser.waitUntil(async () => (await domTabIds()).length === 0, { timeout: 10000, interval: 250 });
     expect(await landingVisible()).toBe(true);
   });
@@ -259,16 +142,14 @@ describe("terminal tabs + local shell (Stage 4)", () => {
   // Test 5: V7 resize - the PTY follows the window, not just the DOM.
   it("resizing the window resizes the PTY (tput cols == cols(activeTab))", async () => {
     await loadFixture("legacy");
-    await clickRow("Localhost");
-    await (await byTestId("landing-connect")).click();
-    const tabId = (await hookTabIds())[0]!;
+    const tabId = await connectRow("Localhost");
     await runCommand(tabId, "stty rows 40 cols 120; tput cols");
     await expectRecentLine(tabId, "120");
 
     for (const [w, h] of [
       [900, 600],
       [1300, 800],
-    ]) {
+    ] as const) {
       await browser.setWindowSize(w, h);
       await browser.pause(600);
       await runCommand(tabId, "tput cols");
@@ -284,9 +165,7 @@ describe("terminal tabs + local shell (Stage 4)", () => {
   // Test 6: 68 MB of output must not freeze the UI (plan Stage 4 notes).
   it("Ctrl+C interrupts a 68 MB cat and the prompt still works", async () => {
     await loadFixture("legacy");
-    await clickRow("Localhost");
-    await (await byTestId("landing-connect")).click();
-    const tabId = (await hookTabIds())[0]!;
+    const tabId = await connectRow("Localhost");
 
     const t0 = Date.now();
     await runCommand(tabId, "cat ~/fastssh-testenv/sshd/big.txt");
@@ -300,7 +179,7 @@ describe("terminal tabs + local shell (Stage 4)", () => {
     // The buffer is capped by scrollback, not unbounded.
     expect(await browser.execute((id) => window.__fastsshTest?.bufferLength(id) ?? 0, tabId)).toBeLessThan(60000);
     expect(interrupted).toBeLessThan(25000);
-  }, 90000);
+  });
 
   // Test 7 (last, and it quits the app): R20 - no PTY child outlives it.
   it("quitting kills every PTY child", async () => {
@@ -316,8 +195,7 @@ describe("terminal tabs + local shell (Stage 4)", () => {
     }
     await browser.waitUntil(() => orphanLines().length >= 3, { timeout: 15000, interval: 400 });
 
-    await browser.execute(() => void window.__TAURI_INTERNALS__?.invoke("quit_app"));
-    await browser.pause(1200);
+    await quitApp();
     // kill_all() runs on RunEvent::Exit, so the probe shells are gone.
     expect(orphanLines()).toEqual([]);
   });

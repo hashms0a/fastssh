@@ -1,25 +1,41 @@
-//! Session commands: spawn / write / resize / kill (R9, task 4.3).
+//! Session commands: spawn / write / resize / kill (R9, tasks 4.3 and 5.3).
 //! Handlers only parse arguments, call the PtyManager and map errors.
 
 use crate::error::AppError;
 use crate::models::Host;
+use crate::paths;
 use crate::pty_manager::{PtyManager, SpawnSpec};
+use crate::ssh_command::{Creds, build_ssh_line};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 
-/// Stage 4 only runs the local shell; remote hosts arrive in Stage 5.
+/// The frontend resolves account credentials before calling us (task 5.2),
+/// so this handler trusts the copy and only re-checks the port and the host,
+/// which `build_ssh_line` does.
 fn spec_for(host: &Host, sync_ssh_config: bool) -> Result<SpawnSpec, AppError> {
     if host.local == Some(true) {
         return Ok(SpawnSpec::LocalShell);
     }
+    if host.name.trim().is_empty() {
+        return Err(AppError::new("bad_request", "The connection has no name."));
+    }
+    let creds = Creds {
+        username: &host.username,
+        identity_file: &host.identity_file,
+    };
+    // FASTSSH_SSH_DIR (the sandbox) makes ssh use the test config and
+    // known_hosts, so a test never touches the owner's ~/.ssh (R20).
+    let sandbox = paths::ssh_dir_overridden().then(paths::ssh_dir);
+    let line = build_ssh_line(host, &creds, sync_ssh_config, sandbox.as_deref())
+        .map_err(|msg| AppError::new("bad_request", msg))?;
+    // The line holds no password; log the name only, never `host`.
     log::debug!(
-        "spawn_session for {} (sync={sync_ssh_config}) is not built yet",
-        host.name
+        "spawn_session {} sync={} sandbox={}",
+        host.name,
+        sync_ssh_config,
+        sandbox.is_some()
     );
-    Err(AppError::new(
-        "unsupported",
-        format!("SSH connections for {} are added in Stage 5", host.name),
-    ))
+    Ok(SpawnSpec::Ssh(line))
 }
 
 #[tauri::command]

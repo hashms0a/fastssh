@@ -31,7 +31,10 @@ describe("window states + permissions (Stage 1)", () => {
   });
 
   it("renders fullscreen and the minimum size without clipping", async () => {
-    await browser.fullScreenWindow?.();
+    // tauri-driver names this command differently from the W3C
+    // Browser type, so it is called only when present.
+    const win = browser as unknown as { fullScreenWindow?(): Promise<unknown> };
+    await win.fullScreenWindow?.();
     await browser.pause(1200);
     await expect(byTestId("runtime-info")).toBeExisting();
     await shot("stage_01", "fullscreen.png");

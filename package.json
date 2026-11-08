@@ -54,7 +54,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e/tsconfig.json",
     "verify": "tools/verify.sh full",
     "verify:quick": "tools/verify.sh quick"
   },

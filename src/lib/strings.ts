@@ -11,6 +11,7 @@ export const strings = {
   bootErrorTitle: "FastSSH could not load its library",
   quit: "Quit",
   dismiss: "Dismiss",
+  close: "Close",
   loading: "Loading\u2026",
   comingSoon: "Coming soon",
   // Header bar (Stage 2)
@@ -58,6 +59,7 @@ export const strings = {
   labelColor: "Color",
   labelFont: "Font",
   labelExtraArgs: "Extra arguments",
+  extraArgsHint: "Appended verbatim and interpreted by /bin/sh.",
   labelSshConfig: "ssh_config block",
   useDefault: "use default",
   browse: "Browse\u2026",
@@ -80,6 +82,24 @@ export const strings = {
     n === 1
       ? "1 host uses this account. It will keep the current credentials and be unlinked."
       : `${n} hosts use this account. They will keep the current credentials and be unlinked.`,
+  // SSH connection dialogs (Stage 5, R11)
+  fingerprintTitle: "Unknown host key",
+  fingerprintHint: "FastSSH has never seen this host key. Yes trusts it for this connection, No rejects it.",
+  yes: "Yes",
+  no: "No",
+  connectionErrorTitle: "Connection failed",
+  retry: "Retry",
+  hostKeyHint: "If the change is expected, run ssh-keygen -R <host>. FastSSH never edits known_hosts.",
+  processExited: (code: number) => `[Process exited with code ${code}]`,
+  errorKind: {
+    refused: "Connection refused",
+    unreachable: "No route to host",
+    timeout: "Connection timed out",
+    closed: "Connection closed",
+    auth: "Authentication failed",
+    dns: "Host name could not be resolved",
+    hostkey: "The host key has changed",
+  } as Record<import("../terminal/promptWatcher").ErrorKind, string>,
   // Validation (validateHost message keys)
   validation: {
     nameRequired: "Name is required",

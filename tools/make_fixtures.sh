@@ -40,7 +40,7 @@ chmod 600 "$T/ssh/config"
 # Legacy EasySSH shape: kebab-case keys, port as STRING, no id.
 cat > "$T/legacy/hosts.json" <<'EOF'
 [
- {"name":"item10","host":"127.0.0.1","port":"2222","username":"tester","password":"fastssh-tes…-out","group":"Lab","color":"rgb(0,43,54)","font":"Monospace 11","tunnels":"-L 18080:localhost:80","identity-file":"","extra-arguments":"-o ConnectTimeout=5","account":""},
+ {"name":"item10","host":"127.0.0.1","port":"2222","username":"tester","password":"fastssh-test-pass","group":"Lab","color":"rgb(0,43,54)","font":"Monospace 11","tunnels":"-L 18080:localhost:80","identity-file":"","extra-arguments":"-o ConnectTimeout=5","account":""},
  {"name":"item2","host":"127.0.0.1","port":"2222","username":"","password":"","group":"Lab","color":"","font":"","tunnels":"","identity-file":"","extra-arguments":"","account":"lab-key"},
  {"name":"my server","host":"192.0.2.10","port":"22","username":"root","password":"","group":"Unreachable","color":"","font":"","tunnels":"","identity-file":"","extra-arguments":"-o ConnectTimeout=5","account":""},
  {"name":"Сервер-1","host":"127.0.0.1","port":"2299","username":"tester","password":"","group":"Unreachable","color":"#300a24","font":"Ubuntu Mono 13","tunnels":"","identity-file":"","extra-arguments":"","account":""},

@@ -25,6 +25,23 @@ fn atomic_write_sets_0600_and_leaves_no_temp_files() {
 }
 
 #[test]
+fn atomic_write_into_a_read_only_dir_names_the_path() {
+    // V3 (Perm = unit): the write must fail with an OS error, and the message
+    // must say which path. The app repairs its own config dir (Stage 1), so
+    // this is the error path a unit test proves, not a chmod on the sandbox.
+    use std::os::unix::fs::PermissionsExt;
+    let d = tmp();
+    fs::set_permissions(d.path(), fs::Permissions::from_mode(0o500)).unwrap();
+    let err =
+        atomic_write(&d.path().join("hosts.json"), b"[]").expect_err("0500 blocks the temp file");
+    assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+    assert!(
+        err.to_string().contains("hosts.json") || err.to_string().contains("Permission denied")
+    );
+    fs::set_permissions(d.path(), fs::Permissions::from_mode(0o700)).unwrap();
+}
+
+#[test]
 fn read_array_missing_is_empty_without_warning() {
     let d = tmp();
     let mut w = vec![];

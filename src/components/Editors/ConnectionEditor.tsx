@@ -276,7 +276,7 @@ export function ConnectionEditor({ seed, mode }: { seed: Host; mode: EditorMode 
 
       <Section title={strings.sectionAdvanced}>
         <div className="grid gap-3">
-          <Field label={strings.labelExtraArgs} htmlFor="ce-extra">
+          <Field label={strings.labelExtraArgs} htmlFor="ce-extra" hint={strings.extraArgsHint}>
             <input
               id="ce-extra"
               data-testid="field-extra"

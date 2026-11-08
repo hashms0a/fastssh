@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { expect } from "@wdio/globals";
-import { byTestId, configDir, loadFixture, shot } from "../helpers";
+import { byTestId, clickInPage, clickRow, configDir, loadFixture, shot } from "../helpers";
 import { tmpDir } from "../paths";
 
 /**
@@ -129,16 +129,22 @@ describe("app shell (Stage 2)", () => {
   });
 
   it("selecting a host shows its landing card (Connect/Edit/Remove)", async () => {
-    const row = await $('//div[@data-testid="host-row" and @data-name="item10"]');
-    await row.click();
+    // A retry starts with no tab for item10, otherwise there is no card to check.
+    await loadFixture("legacy");
+    await clickRow("item10");
     const landing = await byTestId("connection-landing");
     expect(await landing.getAttribute("data-name")).toBe("item10");
     await expect(byTestId("landing-connect")).toBeExisting();
     await expect(byTestId("landing-edit")).toBeExisting();
     await expect(byTestId("landing-remove")).toBeExisting();
-    await (await byTestId("landing-connect")).click();
-    await expect(byTestId("toast")).toBeExisting(); // "Coming soon"
     await shot("stage_02", "landing-item10.png");
+    // Stage 5 made Connect real: it opens the host's tab instead of showing
+    // the Stage 2 "Coming soon" toast.
+    await clickInPage("landing-connect");
+    await browser.waitUntil(async () => (await $$('[data-testid="tab"]')).length === 1, {
+      timeout: 10000,
+      interval: 250,
+    });
   });
 
   it("the header menu and the row context menu open with the plan's items", async () => {

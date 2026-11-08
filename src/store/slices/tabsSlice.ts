@@ -27,6 +27,8 @@ export interface TabsSlice {
   setTabSession: (tabId: string, sessionId: string) => void;
   setTabUnread: (tabId: string, unread: boolean) => void;
   setTabLoggedIn: (tabId: string) => void;
+  /** Retry (task 5.7): the tab keeps its id; its login/exit flags start fresh. */
+  resetTabFlags: (tabId: string) => void;
   setTabExited: (tabId: string, code: number) => void;
 }
 
@@ -129,5 +131,17 @@ export const createTabsSlice: StateCreator<AppStore, [], [], TabsSlice> = (set, 
     const s = get();
     const tab = s.tabs[tabId];
     if (tab) set({ tabs: { ...s.tabs, [tabId]: { ...tab, exited: true, exitCode: code } } });
+  },
+
+  resetTabFlags: (tabId) => {
+    const s = get();
+    const tab = s.tabs[tabId];
+    if (!tab) return;
+    set({
+      tabs: {
+        ...s.tabs,
+        [tabId]: { ...tab, loggedIn: false, exited: false, exitCode: null, unread: false },
+      },
+    });
   },
 });

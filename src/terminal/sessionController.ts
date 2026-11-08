@@ -3,17 +3,21 @@ import type { Terminal } from "@xterm/xterm";
 import { ipc } from "../lib/ipc";
 import { logError } from "../lib/log";
 import { newId } from "../lib/ids";
+import { resolveCredentials } from "../lib/hostUtils";
 import { useAppStore } from "../store/useAppStore";
-import { LOCALHOST_HOST, LOCALHOST_ID, type Host } from "../types/models";
+import { LOCALHOST_HOST, LOCALHOST_ID, type Account, type Host } from "../types/models";
 import { nextTabTitle, tabIdsOf } from "../store/slices/tabsSlice";
-import { createTerminal, dispose, type Entry } from "./terminalRegistry";
+import { createTerminal, dispose, getEntry, type Entry } from "./terminalRegistry";
 import { terminalOptions } from "./terminalOptions";
+import { beginRemote, feedRemote, forgetRemote, isRemoteTab, remoteExit, writeTab } from "./promptActions";
+import { forgetWrites } from "./writeLog";
 
 /**
  * Owns the wiring between a tab, its xterm entry and one PTY session
- * (task 4.6). Listeners are registered BEFORE spawn_session so no early
- * output is lost; a tab closed while the spawn is in flight kills the
- * session it just created.
+ * (task 4.6, Stage 5). Listeners are registered BEFORE spawn_session so no
+ * early output is lost; a tab closed while the spawn is in flight kills the
+ * session it just created. Retry (task 5.7) keeps the tabId and swaps the
+ * sessionId, which is why every listener is looked up per session.
  */
 
 type Closer = () => void;
@@ -59,7 +63,7 @@ function isForegroundTab(tabId: string): boolean {
 function wireStdio(tabId: string, entry: Entry): void {
   entry.term.onData((data) => {
     const sid = sessionIdOf(tabId);
-    if (sid) ipc.writePty(sid, data).catch((e) => logError("write_pty failed", e));
+    if (sid) writeTab(tabId, sid, data);
   });
   entry.term.onResize(({ cols, rows }) => {
     const sid = sessionIdOf(tabId);
@@ -75,10 +79,68 @@ function stop(tabId: string): void {
   }
 }
 
-/** Local tabs close on exit (task 4.12); Stage 5 branches on loggedIn. */
+/** Local tabs close on exit (task 4.12); remote ones follow task 5.5. */
 function onExit(tabId: string, code: number): void {
   useAppStore.getState().setTabExited(tabId, code);
-  closeTab(tabId);
+  if (!isRemoteTab(tabId)) {
+    closeTab(tabId);
+    return;
+  }
+  const entry = getEntry(tabId);
+  if (remoteExit(tabId, code, (text) => entry?.term.write(text))) closeTab(tabId);
+}
+
+/** Account credentials win over the host's own (task 5.2, R2). */
+function withCredentials(host: Host, accounts: readonly Account[]): Host {
+  const c = resolveCredentials(host, accounts);
+  return { ...host, username: c.username, password: c.password, identity_file: c.identity_file };
+}
+
+/** Wire one session to an existing tab and spawn it (open and Retry share this). */
+async function startSession(tabId: string, host: Host, sessionId: string): Promise<void> {
+  const st = useAppStore.getState();
+  const entry = getEntry(tabId);
+  if (!entry) return;
+  const remote = host.local !== true;
+  const spawnHost = remote ? withCredentials(host, st.accounts) : host;
+  if (remote) beginRemote(tabId, spawnHost.password);
+  const writer = createWriter(entry.term);
+  wireStdio(tabId, entry);
+
+  const unlistenOutput: UnlistenFn = await listen<string>(`pty-output-${sessionId}`, (ev) => {
+    writer.push(ev.payload);
+    if (!isForegroundTab(tabId)) useAppStore.getState().setTabUnread(tabId, true);
+    feedRemote(tabId, ev.payload);
+  });
+  const unlistenExit: UnlistenFn = await listen<number>(`pty-exit-${sessionId}`, (ev) => {
+    // The exit event can beat the last output chunk; let the reader flush.
+    setTimeout(() => {
+      writer.flushNow();
+      stop(tabId);
+      onExit(tabId, ev.payload);
+    }, 50);
+  });
+  live.set(tabId, () => {
+    unlistenOutput();
+    unlistenExit();
+  });
+
+  try {
+    await ipc.spawnSession(sessionId, spawnHost, st.settings.syncSshConfig, entry.term.cols, entry.term.rows);
+  } catch (err) {
+    stop(tabId);
+    forgetRemote(tabId);
+    useAppStore.getState().removeTab(tabId);
+    dispose(tabId);
+    useAppStore.getState().pushToast(String(err), "error");
+    return;
+  }
+
+  // Closed while the spawn was in flight: kill the session we just made.
+  if (!useAppStore.getState().tabs[tabId]) {
+    ipc.killSession(sessionId).catch((e) => logError("kill_session failed", e));
+    dispose(tabId);
+  }
 }
 
 export async function connectHost(host: Host): Promise<void> {
@@ -99,43 +161,28 @@ export async function connectHost(host: Host): Promise<void> {
     exited: false,
     exitCode: null,
   });
+  createTerminal(tabId, terminalOptions(host, st.settings));
+  await startSession(tabId, host, sessionId);
+}
 
-  const entry = createTerminal(tabId, terminalOptions(host, st.settings));
-  const writer = createWriter(entry.term);
-  wireStdio(tabId, entry);
-
-  const unlistenOutput: UnlistenFn = await listen<string>(`pty-output-${sessionId}`, (ev) => {
-    writer.push(ev.payload);
-    if (!isForegroundTab(tabId)) useAppStore.getState().setTabUnread(tabId, true);
-  });
-  const unlistenExit: UnlistenFn = await listen<number>(`pty-exit-${sessionId}`, (ev) => {
-    // The exit event can beat the last output chunk; let the reader flush.
-    setTimeout(() => {
-      writer.flushNow();
-      stop(tabId);
-      onExit(tabId, ev.payload);
-    }, 50);
-  });
-  live.set(tabId, () => {
-    unlistenOutput();
-    unlistenExit();
-  });
-
-  try {
-    await ipc.spawnSession(sessionId, host, false, entry.term.cols, entry.term.rows);
-  } catch (err) {
-    stop(tabId);
-    useAppStore.getState().removeTab(tabId);
-    dispose(tabId);
-    useAppStore.getState().pushToast(String(err), "error");
+/** Retry (task 5.7): same tab, new session, cleared buffer and flags. */
+export async function retryTab(tabId: string): Promise<void> {
+  const st = useAppStore.getState();
+  const tab = st.tabs[tabId];
+  if (!tab) return;
+  const host = st.hosts.find((h) => h.id === tab.hostId);
+  if (!host) {
+    closeTab(tabId);
     return;
   }
-
-  // Closed while the spawn was in flight: kill the session we just made.
-  if (!useAppStore.getState().tabs[tabId]) {
-    ipc.killSession(sessionId).catch((e) => logError("kill_session failed", e));
-    dispose(tabId);
-  }
+  stop(tabId);
+  ipc.killSession(tab.sessionId).catch((e) => logError("kill_session failed", e));
+  forgetRemote(tabId);
+  getEntry(tabId)?.term.reset();
+  st.resetTabFlags(tabId);
+  const sessionId = newId();
+  st.setTabSession(tabId, sessionId);
+  await startSession(tabId, host, sessionId);
 }
 
 export function closeTab(tabId: string): void {
@@ -144,6 +191,9 @@ export function closeTab(tabId: string): void {
   if (!tab) return;
   stop(tabId);
   st.removeTab(tabId);
+  st.dropDialogsForTab(tabId);
+  forgetRemote(tabId);
+  forgetWrites(tabId);
   ipc.killSession(tab.sessionId).catch((e) => logError("kill_session failed", e));
   dispose(tabId);
 }

@@ -1,0 +1,10 @@
+{
+  // The specs are not part of the app build (tsconfig.json includes src only),
+  // so they get their own check: tools/verify.sh runs both.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node", "@wdio/globals/types", "mocha"]
+  },
+  "include": ["."]
+}

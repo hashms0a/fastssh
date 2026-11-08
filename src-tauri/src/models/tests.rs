@@ -152,3 +152,13 @@ fn to_json_array_uses_the_disk_shape() {
     assert_eq!(v[0]["port"], "2222", "port is a STRING on disk");
     assert!(v[0].get("identity-file").is_some());
 }
+
+#[test]
+fn debug_redacts_the_password() {
+    let mut h = sample_host();
+    h.password = "hunter2-pass".into();
+    let text = format!("{h:?}");
+    assert!(!text.contains("hunter2-pass"), "{text}");
+    assert!(text.contains("<redacted>"), "{text}");
+    assert!(text.contains("db-10"), "the rest is still visible");
+}
