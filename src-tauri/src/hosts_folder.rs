@@ -40,6 +40,7 @@ pub fn library_dir(folder: &str) -> PathBuf {
 }
 
 /// True when the folder already holds a library (plain or encrypted).
+/// `LIBRARY_FILES` is a fixed 3-element array, so index 0 cannot fail.
 pub fn has_library(folder: &str) -> bool {
     let dir = library_dir(folder);
     dir.join(LIBRARY_FILES[0]).exists() || dir.join(format!("{}.gpg", LIBRARY_FILES[0])).exists()
@@ -76,8 +77,11 @@ fn copy_library(from: &Path, to: &Path) -> Result<(), AppError> {
     if from == to {
         return Ok(());
     }
+    let fresh = !to.exists();
     fs::create_dir_all(to).map_err(|e| AppError::io(to, e))?;
-    let _ = fs::set_permissions(to, fs::Permissions::from_mode(0o700));
+    if fresh {
+        let _ = fs::set_permissions(to, fs::Permissions::from_mode(0o700));
+    }
     for name in LIBRARY_FILES {
         let src = source_file(from, name);
         let dest = match &src {

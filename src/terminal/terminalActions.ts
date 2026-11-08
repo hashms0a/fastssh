@@ -16,7 +16,13 @@ export async function copySelection(tabId?: string): Promise<void> {
   const entry = entryOf(tabId);
   if (!entry) return;
   // R12: an empty selection copies nothing, with no toast.
-  await copyText(entry.term.getSelection()).catch((e) => logError("clipboard write failed", e));
+  await copyText(entry.term.getSelection())
+    .then(() => undefined)
+    .catch((e) => {
+      // A failed copy must say so; otherwise the user thinks the text is there.
+      logError("clipboard write failed", e);
+      useAppStore.getState().pushToast(strings.copyFailed, "error");
+    });
 }
 
 export async function pasteFromClipboard(tabId?: string): Promise<void> {
@@ -43,7 +49,10 @@ export function copyLastOutput(tabId?: string): void {
   const lines = text.split("\n").length;
   void copyText(text)
     .then(() => st.pushToast(strings.copiedLines(lines)))
-    .catch((e) => st.pushToast(String(e), "error"));
+    .catch((e) => {
+      logError("copy last output failed", e);
+      st.pushToast(strings.copyFailed, "error");
+    });
 }
 
 /** Alt+Up: jump to the start of the last command (R15). */

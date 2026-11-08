@@ -90,6 +90,7 @@ export function AccountEditor({ seed, mode }: { seed: Account; mode: EditorMode 
             <input
               id="ae-name"
               data-testid="field-name"
+              data-autofocus
               aria-invalid={revealed && (nameMissing || nameTaken)}
               className={inputClass}
               value={draft.name}

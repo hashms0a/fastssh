@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ipc } from "../lib/ipc";
+import { logError } from "../lib/log";
 import { useAppStore } from "../store/useAppStore";
 import type { PassModalMode } from "../store/slices/uiSlice";
 
@@ -25,10 +26,15 @@ export function useEncryptToggle(): {
   const previous = useRef<PassModalMode | null>(passModal);
 
   useEffect(() => {
+    // A failed probe says nothing about gpg; assume it exists so the switch
+    // stays usable, but say in the log why the tooltip may be wrong (12.1).
     ipc
       .cryptoInfo()
       .then((info) => setAvailable(info.available))
-      .catch(() => setAvailable(true));
+      .catch((e) => {
+        logError("crypto_info failed", e);
+        setAvailable(true);
+      });
   }, []);
 
   useEffect(() => {

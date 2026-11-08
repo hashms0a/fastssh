@@ -84,6 +84,7 @@ export const createTabsSlice: StateCreator<AppStore, [], [], TabsSlice> = (set, 
       tabOrder: { ...s.tabOrder, [tab.hostId]: [...order, tab.id] },
       activeTabByHost: { ...s.activeTabByHost, [tab.hostId]: tab.id },
     });
+    get().markSettingsDirty?.(); // an opened tab belongs in settings.json (12.3)
   },
 
   removeTab: (tabId) => {
@@ -102,6 +103,7 @@ export const createTabsSlice: StateCreator<AppStore, [], [], TabsSlice> = (set, 
     if (order.length === 0) delete orderMap[tab.hostId];
     else orderMap[tab.hostId] = order;
     set({ tabs, tabOrder: orderMap, activeTabByHost: active });
+    get().markSettingsDirty?.(); // a closed tab must not come back (12.3)
   },
 
   dropHostTabs: (hostId) => {
@@ -115,6 +117,7 @@ export const createTabsSlice: StateCreator<AppStore, [], [], TabsSlice> = (set, 
     const activeTabByHost = { ...s.activeTabByHost };
     delete activeTabByHost[hostId];
     set({ tabs, tabOrder, activeTabByHost });
+    get().markSettingsDirty?.();
   },
 
   // Focusing a tab clears its unread dot (R13).

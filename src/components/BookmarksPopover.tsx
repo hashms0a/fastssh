@@ -35,7 +35,23 @@ export function BookmarksPopover({ x, y, onClose }: Props) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      // Task 12.5: while the popover is open, Tab stays inside it. The header
+      // button restores focus when it closes.
+      if (e.key === "Tab" && box.current?.contains(document.activeElement ?? null)) {
+        const items = [...box.current.querySelectorAll<HTMLElement>("button, [href], input, select, textarea")];
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (!first || !last) return;
+        const active = document.activeElement;
+        if ((e.shiftKey && active === first) || (!e.shiftKey && active === last)) {
+          e.preventDefault();
+          (e.shiftKey ? last : first).focus();
+        }
+      }
     };
     const onPointer = (e: PointerEvent) => {
       if (!box.current?.contains(e.target as Node)) onClose();
@@ -91,6 +107,7 @@ export function BookmarksPopover({ x, y, onClose }: Props) {
       ref={box}
       data-testid="bookmarks-popover"
       role="dialog"
+      aria-modal="true"
       aria-label={strings.bookmarks}
       style={{ left: pos.left, top: pos.top }}
       className="fixed z-50 flex w-96 max-w-[92vw] flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-alt)] p-3 shadow-xl"
@@ -136,7 +153,7 @@ export function BookmarksPopover({ x, y, onClose }: Props) {
             <button
               type="button"
               data-testid="bookmark-delete"
-              aria-label={`${strings.bookmarkDelete} ${b.name}`}
+              aria-label={strings.bookmarkDeleteFor(b.name)}
               className={buttonClass}
               onClick={() => void remove(b.id, b.name)}
             >

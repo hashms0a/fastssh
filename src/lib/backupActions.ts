@@ -33,6 +33,8 @@ export function lockLibraryNow(): Promise<boolean> {
   return lockLibrary({
     lock: ipc.lockLibrary,
     setLocked: (locked) => useAppStore.getState().setLocked(locked),
+    // Without this the menu item looks dead when the command fails (12.1).
+    toast: (message) => useAppStore.getState().pushToast(message, "error"),
     log: logError,
   });
 }

@@ -43,7 +43,7 @@ export function HeaderBar() {
         type="button"
         data-testid="new-connection"
         title={strings.newConnection}
-        className="flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1.5 text-sm hover:bg-[var(--accent)] hover:text-white disabled:opacity-60"
+        className="flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1.5 text-sm hover:bg-[var(--accent)] hover:text-[var(--on-accent)] disabled:opacity-60"
         onClick={addHost}
       >
         <Plus size={15} aria-hidden />
@@ -54,7 +54,7 @@ export function HeaderBar() {
         type="button"
         data-testid="local-shell"
         title={strings.localShell}
-        className="flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1.5 text-sm hover:bg-[var(--accent)] hover:text-white"
+        className="flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1.5 text-sm hover:bg-[var(--accent)] hover:text-[var(--on-accent)]"
         onClick={() => openLocalShell()}
       >
         <TerminalSquare size={15} aria-hidden />
@@ -66,7 +66,7 @@ export function HeaderBar() {
         data-testid="bookmarks"
         title={strings.bookmarks}
         aria-expanded={popover ? true : undefined}
-        className="flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1.5 text-sm hover:bg-[var(--accent)] hover:text-white"
+        className="flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1.5 text-sm hover:bg-[var(--accent)] hover:text-[var(--on-accent)]"
         onClick={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
           setPopover({ x: r.left, y: r.bottom + 4 });
@@ -83,7 +83,7 @@ export function HeaderBar() {
         placeholder={strings.filterPlaceholder}
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
-        className="ml-auto w-56 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1.5 text-sm outline-none focus:border-[var(--accent)]"
+        className="ml-auto w-56 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1.5 text-sm focus:border-[var(--accent)]"
       />
 
       <button

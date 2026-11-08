@@ -18,6 +18,8 @@ export interface FolderFlowDeps {
   applyReport: (report: LoadReport) => void;
   updateSettings: (patch: Partial<AppSettings>) => void;
   toast: (message: string, kind?: "info" | "error") => void;
+  /** Optional so a test can stay silent; the app passes `logError` (12.1). */
+  log?: (message: string, error: unknown) => void;
 }
 
 /** Only "loaded" and "copied" mean the field is the truth afterwards. */
@@ -37,6 +39,7 @@ export async function changeHostsFolder(deps: FolderFlowDeps): Promise<FolderRes
     deps.toast(mode === "load" ? strings.folderLoaded(deps.folder) : strings.folderCopied(deps.folder));
     return mode === "load" ? "loaded" : "copied";
   } catch (e) {
+    deps.log?.("set_hosts_folder failed", e);
     deps.toast(errorText(e), "error");
     return "failed";
   }

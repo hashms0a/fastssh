@@ -22,6 +22,10 @@ interface RemoteState {
 
 const remotes = new Map<string, RemoteState>();
 
+/** Tabs that already got the "input is not reaching the terminal" toast, so a
+ *  broken session does not toast on every keystroke (plan 12.1). */
+const writeWarned = new Set<string>();
+
 /** Called for every remote session, including after Retry. */
 export function beginRemote(tabId: string, password: string): void {
   remotes.set(tabId, {
@@ -33,6 +37,7 @@ export function beginRemote(tabId: string, password: string): void {
 
 export function forgetRemote(tabId: string): void {
   remotes.delete(tabId);
+  writeWarned.delete(tabId);
 }
 
 export const isRemoteTab = (tabId: string): boolean => remotes.has(tabId);
@@ -40,7 +45,12 @@ export const isRemoteTab = (tabId: string): boolean => remotes.has(tabId);
 /** One write path for everything the app sends, so the e2e count is honest. */
 export function writeTab(tabId: string, sessionId: string, data: string): void {
   recordWrite(tabId, data);
-  ipc.writePty(sessionId, data).catch((e) => logError("write_pty failed", e));
+  ipc.writePty(sessionId, data).catch((e) => {
+    logError("write_pty failed", e);
+    if (writeWarned.has(tabId)) return;
+    writeWarned.add(tabId);
+    useAppStore.getState().pushToast(strings.keystrokesFailed, "error");
+  });
 }
 
 export function feedRemote(tabId: string, chunk: string): void {
@@ -97,4 +107,5 @@ export function remoteExit(tabId: string, code: number, writeDim: (text: string)
 /** Only for tests: forget every remote state. */
 export function clearRemotes(): void {
   remotes.clear();
+  writeWarned.clear();
 }

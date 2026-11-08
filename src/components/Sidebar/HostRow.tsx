@@ -6,6 +6,7 @@ import { resolveCredentials } from "../../lib/hostUtils";
 import { duplicateHostAction, editHost, removeHost } from "../../lib/editorActions";
 import { activeTabOf, hostHasUnread, tabCountOf } from "../../store/slices/tabsSlice";
 import { useAppStore } from "../../store/useAppStore";
+import { countRender } from "../../lib/renderLog";
 import { ContextMenu } from "../ContextMenu";
 
 interface Props {
@@ -18,10 +19,12 @@ interface Props {
 /**
  * One host row: name, muted user@host:port line, tab-count badge and
  * unread-dot slots (wired Stages 4/6). Single click selects, double-click
- * connects, right-click opens the context menu (Stage 2: Connect only is
- * meaningful for Localhost; the rest arrive in Stage 3).
+ * connects, right-click opens the context menu. Task 12.5: the row is an
+ * `option` in the sidebar listbox, Enter connects, Space selects, and the
+ * badge/dot carry accessible names instead of being colour-only.
  */
 export function HostRow({ host, selected, onConnect }: Props) {
+  countRender(`hostRow:${host.name}`); // task 12.4
   const selectHost = useAppStore((s) => s.selectHost);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const accounts = useAppStore((s) => s.accounts);
@@ -45,17 +48,27 @@ export function HostRow({ host, selected, onConnect }: Props) {
     <div
       data-testid="host-row"
       data-name={host.name}
-      role="button"
+      data-id={host.id}
+      role="option"
       tabIndex={0}
       aria-selected={selected}
       className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm ${
-        selected ? "bg-[var(--accent)] text-white" : "hover:bg-[var(--bg)]"
+        selected ? "bg-[var(--accent)] text-[var(--on-accent)]" : "hover:bg-[var(--bg)]"
       }`}
       onClick={() => {
         selectHost(host.id);
         if (activeTab) setActiveTab(host.id, activeTab); // focusing clears the dot (R13)
       }}
       onDoubleClick={() => onConnect(host)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          onConnect(host); // task 12.5: the keyboard path reaches a session
+        } else if (e.key === " ") {
+          e.preventDefault();
+          selectHost(host.id);
+        }
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         setMenu({ x: e.clientX, y: e.clientY });
@@ -63,20 +76,32 @@ export function HostRow({ host, selected, onConnect }: Props) {
     >
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium">{host.name}</span>
-        <span className={`block truncate text-xs ${selected ? "text-white/80" : "text-[var(--muted)]"}`}>
+        <span className={`block truncate text-xs ${selected ? "text-[var(--on-accent)]" : "text-[var(--muted)]"}`}>
           {strings.hostSubtitle({ ...host, username: resolveCredentials(host, accounts).username })}
         </span>
       </span>
       {/* R13: open-tab count badge + unread dot, hidden when there is none. */}
       <span
         data-testid="host-row-badge"
-        className={tabCount > 0 ? "rounded bg-[var(--bg)] px-1.5 text-xs tabular-nums" : "hidden"}
+        role="img"
+        aria-label={strings.openTabsBadge(tabCount)}
+        className={
+          tabCount > 0
+            ? "rounded border border-[var(--border)] bg-[var(--bg)] px-1.5 text-xs tabular-nums text-[var(--fg)]"
+            : "hidden"
+        }
       >
         {tabCount}
       </span>
       <span
         data-testid="host-row-unread"
-        className={unread ? "h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" : "hidden"}
+        role="img"
+        aria-label={strings.unreadDot}
+        className={
+          unread
+            ? `h-1.5 w-1.5 shrink-0 rounded-full ${selected ? "bg-[var(--on-accent)]" : "bg-[var(--accent)]"}`
+            : "hidden"
+        }
       />
       {menu && <ContextMenu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} />}
     </div>

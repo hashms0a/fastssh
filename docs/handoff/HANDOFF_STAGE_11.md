@@ -331,13 +331,17 @@ implemented item has its own tests and an acceptance line"):
 1. **Backup rotation.** Keep the last N backups automatically (N = 10?), or
    leave the folder alone and let the user prune it? Stage 11 writes one file
    per press and never deletes.
+   - leave the folder alone and let the user prune it
 2. **Restore from a backup.** Should Stage 12 add "Restore from a backup file…"
    (the document is already shaped for it), or is FastSSH's library folder
    enough? Nothing reads a backup yet.
+   - FastSSH's library folder enough.
 3. **How far should "Lock library" go?** Today it drops the passphrase from Rust
    and shows the unlock modal; the library stays visible and terminals stay
    open. A stricter lock would clear the store and close the notebooks.
+   - pick the best option
 4. **Stage 11 items not built** (the owner named only the three above): quick
    connect bar, keychain passphrase storage, host-key-changed "Copy command",
    virtualized host list, broadcast input, run-on-connect bookmark, session
    logging. Say which of these you want in Stage 12's margin, or none.
+   - none.

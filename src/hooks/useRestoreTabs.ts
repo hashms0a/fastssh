@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { isQuitting } from "../lib/quitFlow";
 import { restorePlan, runRestore } from "../lib/restore";
 import { logError } from "../lib/log";
+import { strings } from "../lib/strings";
 import { useAppStore } from "../store/useAppStore";
 import { connectHost } from "../terminal/sessionController";
 
@@ -29,6 +30,11 @@ export function useRestoreTabs(): void {
         st.selectHost(host.id);
       },
       stopped: isQuitting,
-    }).catch((e) => logError("restoreTabs failed", e));
+    }).catch((e) => {
+      // The plan is already consumed, so some tabs are missing on screen;
+      // the log alone would leave the user wondering why (plan 12.1).
+      logError("restoreTabs failed", e);
+      useAppStore.getState().pushToast(strings.restoreFailed, "error");
+    });
   }, []);
 }

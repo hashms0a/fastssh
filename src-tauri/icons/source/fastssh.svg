@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!--
+    FastSSH app icon (task 12.6). Original artwork: a terminal prompt glyph
+    in the app's accent colour on a rounded square, with a small link mark
+    for the SSH connection. No third-party glyph is used.
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f2b33" />
+      <stop offset="1" stop-color="#141d23" />
+    </linearGradient>
+  </defs>
+
+  <rect x="32" y="32" width="960" height="960" rx="190" fill="url(#bg)" />
+  <rect x="32" y="32" width="960" height="960" rx="190" fill="none" stroke="#3daee9" stroke-width="26" opacity="0.55" />
+
+  <!-- prompt chevron -->
+  <path
+    d="M288 372 L470 512 L288 652"
+    fill="none"
+    stroke="#3daee9"
+    stroke-width="92"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- cursor block -->
+  <rect x="520" y="586" width="252" height="92" rx="46" fill="#3daee9" />
+
+  <!-- connection link: two dots joined by a line, lower right -->
+  <circle cx="690" cy="800" r="34" fill="#eff0f1" opacity="0.85" />
+  <circle cx="830" cy="800" r="34" fill="#eff0f1" opacity="0.85" />
+  <path d="M690 800 H830" stroke="#eff0f1" stroke-width="20" stroke-linecap="round" opacity="0.85" />
+</svg>

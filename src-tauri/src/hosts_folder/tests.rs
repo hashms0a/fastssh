@@ -64,9 +64,11 @@ fn copy_writes_the_three_files_with_mode_0600() {
     fs::write(from.join("accounts.json"), "[]").unwrap();
     fs::write(from.join("bookmarks.json"), "[]").unwrap();
 
+    // A folder the app has to create gets the private mode.
+    let to_dir = to.path().join("library");
     let report = set_hosts_folder(
         &settings_for(&from),
-        &to.path().display().to_string(),
+        &to_dir.display().to_string(),
         "copy",
         &crypto(),
     )
@@ -74,16 +76,13 @@ fn copy_writes_the_three_files_with_mode_0600() {
 
     assert_eq!(report.hosts.len(), 1);
     assert_eq!(report.hosts[0].name, "db1");
-    assert_eq!(
-        report.settings.hosts_folder,
-        to.path().display().to_string()
-    );
+    assert_eq!(report.settings.hosts_folder, to_dir.display().to_string());
     for name in LIBRARY_FILES {
-        let file = to.path().join(name);
+        let file = to_dir.join(name);
         assert!(file.exists(), "{name} was not copied");
         assert_eq!(mode_of(&file), 0o600, "{name} must be 0600");
     }
-    assert_eq!(mode_of(to.path()), 0o700, "the folder itself is 0700");
+    assert_eq!(mode_of(&to_dir), 0o700, "a folder we made is 0700");
 }
 
 #[test]

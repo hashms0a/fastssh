@@ -199,19 +199,23 @@ describe("lockLibrary (Stage 11, Stage 10 open question 1)", () => {
   it("drops the passphrase and puts the unlock modal back up", async () => {
     const lock = vi.fn().mockResolvedValue(undefined);
     const setLocked = vi.fn();
+    const toast = vi.fn();
     const log = vi.fn();
-    expect(await lockLibrary({ lock, setLocked, log })).toBe(true);
+    expect(await lockLibrary({ lock, setLocked, toast, log })).toBe(true);
     expect(lock).toHaveBeenCalledTimes(1);
     expect(setLocked).toHaveBeenCalledWith(true);
     expect(log).not.toHaveBeenCalled();
+    expect(toast).not.toHaveBeenCalled();
   });
 
-  it("a failed lock leaves the library unlocked and logs the error", async () => {
+  it("a failed lock leaves the library unlocked, logs the error and says so", async () => {
     const lock = vi.fn().mockRejectedValue({ code: "io", message: "no" });
     const setLocked = vi.fn();
+    const toast = vi.fn();
     const log = vi.fn();
-    expect(await lockLibrary({ lock, setLocked, log })).toBe(false);
+    expect(await lockLibrary({ lock, setLocked, toast, log })).toBe(false);
     expect(setLocked).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith("lock_library failed", expect.objectContaining({ code: "io" }));
+    expect(toast).toHaveBeenCalledWith(strings.lockFailed);
   });
 });

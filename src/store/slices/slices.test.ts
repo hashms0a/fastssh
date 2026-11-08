@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS, LOCALHOST_ID, type Host } from "../../types/models";
 import { useAppStore } from "../useAppStore";
 import { callsTo, installIpcMock, emptyReport, type MockBackend } from "../../test/ipcMock";
+import { strings } from "../../lib/strings";
 
 let backend: MockBackend;
 
@@ -13,6 +14,7 @@ beforeEach(() => {
     accounts: [],
     bookmarks: [],
     warnings: [],
+    toasts: [],
   });
 });
 
@@ -33,6 +35,48 @@ describe("settingsSlice.updateSettings", () => {
     expect(saved.windowHeight).toBe(DEFAULT_SETTINGS.windowHeight); // untouched
   });
 
+  it("the debounced save carries the open tabs (crash recovery, task 12.3)", () => {
+    vi.useFakeTimers();
+    const host: Host = {
+      id: "h1",
+      name: "web-1",
+      group: "",
+      host: "10.0.0.1",
+      port: 22,
+      username: "",
+      password: "",
+      identity_file: "",
+      account: "",
+      color: "",
+      font: "",
+      tunnels: "",
+      extra_arguments: "",
+      ssh_config: "",
+    };
+    const tab = {
+      id: "t1",
+      hostId: "h1",
+      sessionId: "s1",
+      title: "web-1",
+      unread: false,
+      loggedIn: false,
+      exited: false,
+      exitCode: null,
+    };
+    useAppStore.setState({ hosts: [host], tabOrder: { h1: ["t1"] }, tabs: { t1: tab } });
+
+    useAppStore.getState().updateSettings({ restoreHosts: true, windowWidth: 900 });
+    vi.advanceTimersByTime(400);
+    const on = callsTo(backend, "save_settings").at(-1)?.args.settings as { openedHosts: unknown };
+    expect(on.openedHosts).toEqual([{ hostName: "web-1", tabCount: 1 }]);
+
+    // Restore off: nothing is remembered, same as the quit flow.
+    useAppStore.getState().updateSettings({ restoreHosts: false });
+    vi.advanceTimersByTime(400);
+    const off = callsTo(backend, "save_settings").at(-1)?.args.settings as { openedHosts: unknown };
+    expect(off.openedHosts).toEqual(DEFAULT_SETTINGS.openedHosts);
+  });
+
   it("ignores undefined values in the patch", () => {
     useAppStore.getState().updateSettings({ windowWidth: 800, windowHeight: undefined });
     const s = useAppStore.getState().settings;
@@ -47,6 +91,31 @@ describe("settingsSlice.updateSettings", () => {
     expect(callsTo(backend, "save_settings")).toHaveLength(1);
     vi.advanceTimersByTime(1000);
     expect(callsTo(backend, "save_settings")).toHaveLength(1);
+  });
+
+  it("a failing settings write toasts once, and a later failure is reported again (task 12.1)", async () => {
+    backend.failNext("save_settings", "settings.json: Read-only file system (os error 30)");
+    useAppStore.getState().updateSettings({ windowWidth: 900 });
+    await vi.waitFor(() => expect(callsTo(backend, "save_settings")).toHaveLength(1));
+    await vi.waitFor(() => expect(useAppStore.getState().toasts).toHaveLength(1));
+    expect(useAppStore.getState().toasts[0]).toMatchObject({
+      kind: "error",
+      message: strings.settingsSaveFailed,
+    });
+
+    // The same folder keeps failing; the debounced writer must not spam.
+    backend.failNext("save_settings", "settings.json: Read-only file system (os error 30)");
+    useAppStore.getState().updateSettings({ windowWidth: 901 });
+    await vi.waitFor(() => expect(callsTo(backend, "save_settings")).toHaveLength(2));
+    await Promise.resolve();
+    expect(useAppStore.getState().toasts).toHaveLength(1);
+
+    // A write that works again clears the guard, so the next failure is heard.
+    useAppStore.getState().updateSettings({ windowWidth: 902 });
+    await vi.waitFor(() => expect(callsTo(backend, "save_settings")).toHaveLength(3));
+    backend.failNext("save_settings", "settings.json: Read-only file system (os error 30)");
+    useAppStore.getState().updateSettings({ windowWidth: 903 });
+    await vi.waitFor(() => expect(useAppStore.getState().toasts).toHaveLength(2));
   });
 });
 

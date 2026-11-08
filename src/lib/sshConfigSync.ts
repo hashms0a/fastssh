@@ -24,6 +24,8 @@ export interface SyncDeps {
   /** Persist `syncSshConfig` (updateSettings). */
   setSync: (on: boolean) => void;
   toast: (message: string, kind?: "info" | "error") => void;
+  /** Optional so a test can stay silent; the app passes `logError` (12.1). */
+  log?: (message: string, error: unknown) => void;
 }
 
 export type SyncOutcome = "enabled" | "cancelled" | "failed";
@@ -42,6 +44,7 @@ export async function enableSync(d: SyncDeps): Promise<SyncOutcome> {
     d.toast(strings.syncImported(report.imported.length, report.skipped.length));
     return "enabled";
   } catch (e) {
+    d.log?.("enable_ssh_config_sync failed", e);
     d.toast(errorText(e), "error");
     return "failed";
   }
@@ -54,6 +57,7 @@ export async function disableSync(d: SyncDeps): Promise<void> {
     d.setSync(false);
     d.toast(strings.syncStopped);
   } catch (e) {
+    d.log?.("disable_ssh_config_sync failed", e);
     d.toast(errorText(e), "error");
   }
 }

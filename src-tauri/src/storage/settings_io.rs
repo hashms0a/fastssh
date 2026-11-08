@@ -19,6 +19,26 @@ pub fn load_settings() -> AppSettings {
     load_settings_with_warnings(&mut vec![])
 }
 
+/// What the read before the window found. `lib.rs` needs the window size at
+/// that point, and that read renames a corrupt file aside; without this the
+/// user's settings would reset with nothing on screen to say why. The first
+/// `load_all` hands them to the frontend.
+static BOOT_WARNINGS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+pub fn load_settings_for_boot() -> AppSettings {
+    let mut warnings = vec![];
+    let settings = load_settings_with_warnings(&mut warnings);
+    if !warnings.is_empty() {
+        BOOT_WARNINGS.lock().unwrap().extend(warnings);
+    }
+    settings
+}
+
+/// Once: the boot warnings go out with the first `load_all` report.
+pub fn take_boot_warnings() -> Vec<String> {
+    std::mem::take(&mut *BOOT_WARNINGS.lock().unwrap())
+}
+
 pub fn load_settings_with_warnings(warnings: &mut Vec<String>) -> AppSettings {
     load_settings_from(&settings_path(), warnings)
 }

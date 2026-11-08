@@ -3,7 +3,9 @@ import path from "node:path";
 import os from "node:os";
 import { execSync } from "node:child_process";
 
-const T = process.env.FASTSSH_TESTENV ?? path.join(os.homedir(), "fastssh-testenv");
+export const T = process.env.FASTSSH_TESTENV ?? path.join(os.homedir(), "fastssh-testenv");
+/** The binary e2e launches (same default as wdio.conf). */
+const APP = process.env.E2E_APP ?? "./src-tauri/target/debug/fastssh";
 /** The sandbox config dir the app under test uses (helpers.ts sets the env). */
 export const configDir = process.env.FASTSSH_CONFIG_DIR ?? path.join(T, "config");
 export const sshDir = process.env.FASTSSH_SSH_DIR ?? path.join(T, "ssh");
@@ -35,6 +37,13 @@ const SET_FILES: Record<FixtureSet, string[]> = {
 
 /** Empties the sandbox config dir and copies in one fixture set. */
 export function resetSandbox(set: FixtureSet = "legacy"): void {
+  // A run killed inside a permissions test can leave the folder unreadable;
+  // restoring the mode here keeps the next run from dying on rmSync.
+  try {
+    fs.chmodSync(configDir, 0o700);
+  } catch {
+    /* no folder yet */
+  }
   fs.rmSync(configDir, { recursive: true, force: true });
   fs.mkdirSync(configDir, { recursive: true });
   for (const rel of SET_FILES[set]) {
@@ -70,6 +79,37 @@ export const rowsInGroup = async (group: string): Promise<string[]> =>
     if (!box) return [];
     return [...box.querySelectorAll('[data-testid="host-row"]')].map((e) => e.getAttribute("data-name") ?? "");
   }, group)) as string[];
+
+/** Kill the app without letting it save anything (crash-recovery tests). */
+export function killApp(signal = "-9"): void {
+  for (const pattern of [path.resolve(APP), APP]) {
+    try {
+      execSync(`pkill ${signal} -f '${pattern}'`, { stdio: "ignore" });
+    } catch {
+      /* nothing matched */
+    }
+  }
+}
+
+/** Wait for the UI to come back after a restart. */
+export async function waitWorkspace(timeout = 45000): Promise<void> {
+  await (await byTestId("header-bar")).waitForExist({ timeout, interval: 300 });
+}
+
+/** What the app has in settings.json right now (null when it never wrote one). */
+export function readSettingsFile(): Record<string, unknown> | null {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(configDir, "settings.json"), "utf8")) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/** Restart the app and wait for the UI. */
+export async function restartApp(): Promise<void> {
+  await browser.reloadSession();
+  await waitWorkspace();
+}
 
 /** Fresh sandbox data, then restart the app so it loads it. */
 export async function loadFixture(set: FixtureSet = "legacy"): Promise<void> {
@@ -139,6 +179,9 @@ declare global {
       unread(tabId: string): boolean;
       isFullscreen(): Promise<boolean>;
       readClipboard(): Promise<string>;
+      renderCount(name: string): number;
+      liveTerminals(): number;
+      resetRenderCounts(): void;
       appearance(tabId: string): {
         fontFamily: string;
         fontSize: number;
@@ -199,7 +242,91 @@ export const hookAppearance = async (tabId: string): Promise<TermAppearance | nu
 export const hookRows = async (tabId: string): Promise<number> =>
   (await browser.execute((id) => window.__fastsshTest?.appearance(id)?.rows ?? 0, tabId)) as number;
 
-/** Total buffer lines, viewport included. */
+/** How many xterm instances are alive right now (task 12.4 disposal proof). */
+export const hookLiveTerminals = async (): Promise<number> =>
+  (await browser.execute(() => window.__fastsshTest?.liveTerminals() ?? -1)) as number;
+
+export const hookRenderCount = async (name: string): Promise<number> =>
+  (await browser.execute((n) => window.__fastsshTest?.renderCount(n) ?? 0, name)) as number;
+
+export const hookResetRenders = async (): Promise<void> => {
+  await browser.execute(() => window.__fastsshTest?.resetRenderCounts());
+};
+
+/** Close one tab through its own close button, inside the page. */
+export async function closeTabByHook(tabId: string): Promise<void> {
+  await browser.execute((id) => {
+    const tab = document.querySelector(`[data-testid="tab"][data-tab-id="${id}"]`);
+    (tab?.querySelector('[data-testid="tab-close"]') as HTMLElement | null)?.click();
+  }, tabId);
+  await browser.pause(400);
+}
+
+/**
+ * Ask the Tauri window itself (the W3C window commands are not implemented by
+ * tauri-driver). Tauri v2's setter commands take their argument under `value`,
+ * and `Size` is an externally-tagged enum: `{ Physical: { width, height } }`.
+ */
+export async function windowCommand(cmd: string, args: Record<string, unknown> = {}): Promise<void> {
+  await browser.execute(
+    (c, a) => void window.__TAURI_INTERNALS__?.invoke(`plugin:window|${c}`, { label: "main", ...a }),
+    cmd,
+    args,
+  );
+}
+
+/**
+ * Overflow check for task 12.3: the chrome must never push the page wider than
+ * the viewport. The tab strip is deliberately `overflow-x-auto` (many tabs are
+ * meant to scroll), so it is not in this list; its own rule is that each title
+ * is cut with an ellipsis, which `window.e2e.ts` asserts directly.
+ */
+export const horizontalOverflow = async (): Promise<Record<string, number>> =>
+  (await browser.execute(() => {
+    const out: Record<string, number> = {
+      document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+    for (const id of ["header-bar", "sidebar", "host-list"]) {
+      const el = document.querySelector(`[data-testid="${id}"]`);
+      out[id] = el ? el.scrollWidth - el.clientWidth : 0;
+    }
+    return out;
+  })) as Record<string, number>;
+
+/** Every button whose only content is an icon and that has no accessible name. */
+export const unlabeledIconControls = async (): Promise<string[]> =>
+  (await browser.execute(() => {
+    const bad: string[] = [];
+    for (const el of [...document.querySelectorAll("button, [role=option], [role=tab]")]) {
+      const text = (el.textContent ?? "").trim();
+      const name = el.getAttribute("aria-label") ?? el.getAttribute("title") ?? "";
+      if (!text && !name) bad.push(el.getAttribute("data-testid") ?? el.outerHTML.slice(0, 60));
+    }
+    return bad;
+  })) as string[];
+
+/** True when index.css really declares a visible focus ring. */
+export const focusRingDefined = async (): Promise<boolean> =>
+  (await browser.execute(() => {
+    for (const sheet of [...document.styleSheets]) {
+      let rules: CSSRule[];
+      try {
+        rules = [...sheet.cssRules];
+      } catch {
+        continue; // a cross-origin sheet would throw here
+      }
+      if (
+        rules.some((r) => {
+          const rule = r as CSSStyleRule;
+          return rule.selectorText?.includes(":focus-visible") && /outline\s*:/.test(rule.cssText);
+        })
+      ) {
+        return true;
+      }
+    }
+    return false;
+  })) as boolean;
+
 export const hookBufferLength = async (tabId: string): Promise<number> =>
   (await browser.execute((id) => window.__fastsshTest?.bufferLength(id) ?? 0, tabId)) as number;
 
@@ -342,7 +469,14 @@ export async function doubleClickRow(name: string): Promise<void> {
 
 export async function openExtraTab(): Promise<void> {
   const before = (await domTabIds()).length;
-  await (await byTestId("tab-new")).click();
+  // Every host has a notebook in the DOM, so "tab-new" is not unique: click
+  // the one in the notebook that is actually showing.
+  await browser.execute(() => {
+    const shown = [...document.querySelectorAll<HTMLElement>('[data-testid="notebook"]')].find(
+      (n) => n.offsetParent !== null,
+    );
+    shown?.querySelector<HTMLElement>('[data-testid="tab-new"]')?.click();
+  });
   await browser.waitUntil(async () => (await domTabIds()).length === before + 1, { timeout: 8000, interval: 250 });
 }
 
@@ -500,6 +634,16 @@ export async function requestWindowClose(label = "main"): Promise<void> {
 export async function toastTexts(): Promise<string[]> {
   const out: string[] = [];
   for (const el of await $$('[data-testid="toast"]')) out.push(await el.getText());
+  return out;
+}
+
+/** Toast text plus the load-warning rows (warnings are their own banner, not
+ *  toasts), for assertions about what the app reported at boot. */
+export async function alertTexts(): Promise<string[]> {
+  const out: string[] = [];
+  for (const sel of ['[data-testid="toast"]', '[data-testid="warning-line"]']) {
+    for (const el of await $$(sel)) out.push(await el.getText());
+  }
   return out;
 }
 

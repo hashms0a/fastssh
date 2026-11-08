@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { X } from "lucide-react";
 import { strings } from "../../lib/strings";
+import { countRender } from "../../lib/renderLog";
 import { useAppStore } from "../../store/useAppStore";
 import { closeTab } from "../../terminal/sessionController";
 
@@ -23,6 +24,7 @@ interface Props {
  * is never saved.
  */
 export function TabButton({ tabId, hostId, active, dragTarget, onDragStart, onDragEnd, onDropOn }: Props) {
+  countRender(`tab:${tabId}`); // task 12.4
   const title = useAppStore((s) => s.tabs[tabId]?.title ?? "");
   const unread = useAppStore((s) => s.tabs[tabId]?.unread ?? false);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
@@ -54,7 +56,7 @@ export function TabButton({ tabId, hostId, active, dragTarget, onDragStart, onDr
       data-tab-id={tabId}
       data-title={title}
       draggable={!renaming}
-      className={`flex items-center gap-1.5 rounded-t border-b-2 px-2 py-1 text-sm ${
+      className={`flex shrink-0 items-center gap-1.5 rounded-t border-b-2 px-2 py-1 text-sm ${
         active ? "border-[var(--accent)] bg-[var(--bg)]" : "border-transparent text-[var(--muted)] hover:bg-[var(--bg)]"
       } ${dragTarget ? "border-[var(--accent)] border-dashed" : ""}`}
       onClick={() => setActiveTab(hostId, tabId)}
@@ -85,7 +87,7 @@ export function TabButton({ tabId, hostId, active, dragTarget, onDragStart, onDr
           aria-label={strings.renameTab}
           defaultValue={title}
           autoFocus
-          className="w-32 rounded border border-[var(--accent)] bg-[var(--bg)] px-1 py-0.5 text-sm outline-none"
+          className="w-32 rounded border border-[var(--accent)] bg-[var(--bg)] px-1 py-0.5 text-sm"
           onClick={(e) => e.stopPropagation()}
           onDragStart={(e) => e.preventDefault()}
           onBlur={(e) => {
@@ -107,9 +109,18 @@ export function TabButton({ tabId, hostId, active, dragTarget, onDragStart, onDr
           }}
         />
       ) : (
-        <span className="max-w-48 truncate">{title}</span>
+        <span data-testid="tab-title" className="max-w-48 truncate">
+          {title}
+        </span>
       )}
-      {unread && <span data-testid="tab-unread" className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" />}
+      {unread && (
+        <span
+          data-testid="tab-unread"
+          role="img"
+          aria-label={strings.unreadDot}
+          className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]"
+        />
+      )}
       <button
         type="button"
         data-testid="tab-close"

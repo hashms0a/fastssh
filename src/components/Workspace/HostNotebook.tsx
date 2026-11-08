@@ -62,29 +62,34 @@ export function HostNotebook({ host, visible }: Props) {
     >
       {/* R14: the toolbar belongs to the visible notebook's active tab. */}
       {visible && searchOpen && <SearchToolbar />}
-      <div
-        data-testid="tab-bar"
-        role="tablist"
-        className="flex items-end gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-alt)] px-2 pt-1"
-      >
-        {ids.map((id) => (
-          <TabButton
-            key={id}
-            tabId={id}
-            hostId={host.id}
-            active={id === activeId}
-            dragTarget={dragged !== null && dragged !== id}
-            onDragStart={onDragStart}
-            onDragEnd={onDragEnd}
-            onDropOn={onDropOn}
-          />
-        ))}
+      {/* The strip scrolls; the "New tab" button sits outside it so it stays
+          reachable when the tabs fill the width (task 12.2, 20 tabs). */}
+      <div className="flex items-end border-b border-[var(--border)] bg-[var(--bg-alt)] px-2 pt-1">
+        <div
+          data-testid="tab-bar"
+          role="tablist"
+          aria-label={strings.tabBar(host.name)}
+          className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto"
+        >
+          {ids.map((id) => (
+            <TabButton
+              key={id}
+              tabId={id}
+              hostId={host.id}
+              active={id === activeId}
+              dragTarget={dragged !== null && dragged !== id}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              onDropOn={onDropOn}
+            />
+          ))}
+        </div>
         <button
           type="button"
           data-testid="tab-new"
           aria-label={strings.newTab}
           title={strings.newTab}
-          className="mb-1 rounded p-1 hover:bg-[var(--bg)]"
+          className="mb-1 shrink-0 rounded p-1 hover:bg-[var(--bg)]"
           onClick={() => void connectHost(host)}
         >
           <Plus size={14} aria-hidden />

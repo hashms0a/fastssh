@@ -1,7 +1,9 @@
 import { useAppStore } from "../store/useAppStore";
 import { readClipboard } from "../lib/clipboard";
+import { renderCount, resetRenderCounts } from "../lib/renderLog";
 import { getEntry, getText, markerLine, viewportY } from "../terminal/terminalRegistry";
 import { writeCount } from "../terminal/writeLog";
+import { entryIds } from "../terminal/terminalRegistry";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 /**
@@ -25,6 +27,12 @@ export interface FastSSHTestHook {
   unread(tabId: string): boolean;
   /** Whether the window is fullscreen (F11, R17). */
   isFullscreen(): Promise<boolean>;
+  /** Task 12.4: how many times a component body ran since the last reset. */
+  renderCount(name: string): number;
+  /** Task 12.4: xterm instances still alive, so "closing tabs disposed them"
+   *  is measurable instead of guessed from RSS. */
+  liveTerminals(): number;
+  resetRenderCounts(): void;
   /** Clipboard text, for the Alt+C / Ctrl+Shift+C assertions. */
   readClipboard(): Promise<string>;
   /** Task 8.2: what the Preferences change put into this tab's xterm. */
@@ -66,6 +74,9 @@ export const testHook: FastSSHTestHook = {
   },
   isFullscreen: () => getCurrentWindow().isFullscreen(),
   readClipboard: () => readClipboard(),
+  renderCount: (name) => renderCount(name),
+  liveTerminals: () => entryIds().length,
+  resetRenderCounts: () => resetRenderCounts(),
 };
 
 export function installTestHook(): void {

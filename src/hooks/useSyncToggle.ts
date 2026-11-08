@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { ipc } from "../lib/ipc";
+import { errorText } from "../lib/errorText";
+import { logError } from "../lib/log";
 import { disableSync, enableSync, type SyncDeps } from "../lib/sshConfigSync";
 import { useAppStore } from "../store/useAppStore";
 
@@ -26,10 +28,16 @@ export function useSyncToggle(): { tick: number; run: (on: boolean) => Promise<v
       reload: async () => st.hydrate(await ipc.loadAll()),
       setSync: (v) => st.updateSettings({ syncSshConfig: v }),
       toast: st.pushToast,
+      log: logError,
     };
     try {
       if (on) await enableSync(deps);
       else await disableSync(deps);
+    } catch (e) {
+      // `ssh_config_info` and the confirm dialog run before enableSync's own
+      // try/catch, so a failure here would otherwise vanish (plan 12.1).
+      logError("ssh config sync switch failed", e);
+      st.pushToast(errorText(e), "error");
     } finally {
       setTick((n) => n + 1);
     }

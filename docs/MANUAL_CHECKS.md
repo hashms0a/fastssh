@@ -135,3 +135,56 @@ everything that can be asserted lives in a vitest unit test or an e2e spec.
       unlock modal must appear at once, the open terminals must keep working,
       and editing a connection must fail with the locked message until you
       unlock. Nothing on disk changes.
+
+## Stage 12 - polish, edge cases, release build
+
+The automated edge pass (`e2e/specs/edge.e2e.ts`, 15 cases) covers the empty
+library, 2000 hosts, a 255-character name, Unicode names, an empty user, IPv6
+`::1`, an identity file path containing spaces, a missing identity file, a
+read-only hosts folder, a corrupt `settings.json`, 5000 bookmarks, `kill -9`
+mid-connect, 20 open tabs, closing a tab while it connects, and Retry spam.
+These need a human or root:
+
+- [ ] **Full disk while saving.** Needs `sudo`, so it is not automated. Mount a
+      small tmpfs and point the library at it:
+      `sudo mount -t tmpfs -o size=64k tmpfs /tmp/tinyfs`, start the app with
+      `FASTSSH_CONFIG_DIR=/tmp/tinyfs`, create a connection and save.
+      **Expect:** a red toast naming the file and the error (no space left on
+      device), the new row disappears again (the store rolls back),
+      `hosts.json` still parses, and the app stays usable. Then
+      `sudo umount /tmp/tinyfs`.
+- [ ] **Fractional display scale 125%.** GNOME Settings -> Displays -> Scale
+      125% (the automated suite only ever runs at 100%). Start FastSSH, resize
+      to the minimum 800x500, open a tab, and look at the sidebar, the tab bar
+      and the terminal. **Expect:** nothing clipped or blurry, the tab bar
+      scrolls instead of pushing the "New tab" button off-screen, scrollbars and
+      text stay readable, and the window opens at the saved size on restart.
+- [ ] **Second monitor.** Drag the window to the second monitor, maximize there,
+      quit with `Ctrl+Q`, start again. **Expect:** the window comes back on that
+      monitor at the same size, the open tabs restore, and maximizing/fullscreen
+      (`F11`) behave on both screens.
+- [ ] **The other session type.** The machine profile is GNOME on Wayland, so
+      log into the Ubuntu _X11_ session (or the reverse) and run the AppImage.
+      **Expect:** the window renders (no blank area), `Ctrl+Shift+C/V` copy and
+      paste work through the clipboard, `Ctrl+Shift+E` opens the file manager,
+      and the window close request still saves the settings.
+- [ ] **Suspend and resume.** Connect to a real host, suspend the machine for a
+      minute, resume. **Expect:** the tab shows what ssh printed (connection
+      closed or the prompt back); no crash, and _Retry_ reconnects in a new tab
+      if the session died.
+- [ ] **NVIDIA + Wayland.** The build machine has an AMD GPU; on an NVIDIA card
+      check the window renders without the DMABUF workaround being disabled
+      (About shows `DMABUF disabled: yes`).
+- [ ] **Run the AppImage on a clean install** (no `libfuse2t64`):
+      `./FastSSH_1.0.0_amd64.AppImage --appimage-extract-and-run` must open a
+      rendered window, connect to a real host, run `gpg` encryption, and open
+      the file manager with no `symbol lookup error` in the terminal that
+      launched it.
+- [ ] **Desktop entry.** After installing the AppImage (e.g. with
+      `appimagelauncher`), check the app grid shows the FastSSH icon and name,
+      and that the entry's `Categories=` puts it in the Internet/Remote-access
+      and Terminal sections.
+- [ ] **Real passphrase.** Enable encryption with a passphrase containing spaces
+      and check the unlock dialog accepts it after a restart, and that _Lock
+      now_ followed by the wrong passphrase reports "wrong passphrase" instead
+      of an empty library.

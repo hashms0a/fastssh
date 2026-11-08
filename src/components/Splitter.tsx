@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react";
+import { strings } from "../lib/strings";
 import { useAppStore } from "../store/useAppStore";
 
 const MIN_W = 160;
@@ -47,9 +48,12 @@ export function Splitter() {
       data-testid="splitter"
       role="separator"
       aria-orientation="vertical"
-      aria-label="Sidebar width"
+      aria-label={strings.sidebarWidth}
+      aria-valuenow={panelSize}
+      aria-valuemin={MIN_W}
+      aria-valuemax={MAX_W}
       tabIndex={0}
-      className="w-1 shrink-0 cursor-col-resize bg-[var(--border)] outline-none hover:bg-[var(--accent)] focus:bg-[var(--accent)]"
+      className="w-1 shrink-0 cursor-col-resize bg-[var(--border)] hover:bg-[var(--accent)] focus:bg-[var(--accent)]"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

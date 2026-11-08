@@ -47,7 +47,7 @@ export function SearchToolbar() {
         type="text"
         value={search.text}
         placeholder={strings.searchPlaceholder}
-        className="min-w-40 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-0.5 text-sm outline-none focus:border-[var(--accent)]"
+        className="min-w-40 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-0.5 text-sm focus:border-[var(--accent)]"
         onChange={(e) => applySearchText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Escape") {

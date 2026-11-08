@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, act } from "@testing-library/react";
 import { SourceListView } from "./SourceListView";
+import { strings } from "../../lib/strings";
 import { useAppStore } from "../../store/useAppStore";
 import { DEFAULT_SETTINGS, LOCALHOST_HOST, type Host } from "../../types/models";
 import { tabIdsOf } from "../../store/slices/tabsSlice";
@@ -136,5 +137,72 @@ describe("SourceListView (Stage 2)", () => {
     const rows = [...document.querySelectorAll('[data-testid="account-row"]')];
     expect(rows).toHaveLength(1);
     expect(rows[0]?.getAttribute("data-name")).toBe("lab-key");
+  });
+});
+
+describe("sidebar keyboard path (task 12.5)", () => {
+  const rows = () => [...document.querySelectorAll<HTMLElement>('[data-testid="host-row"]')];
+  const selectedName = () => useAppStore.getState().selectedHostId;
+
+  // The tests above leave filter/collapse state behind; this path needs the
+  // full list rendered.
+  beforeEach(() => {
+    act(() => {
+      useAppStore.getState().setFilter("");
+      useAppStore.getState().updateSettings({ collapsedGroups: [] });
+      useAppStore.getState().setSidebarMode("hosts");
+    });
+  });
+
+  it("ArrowDown/ArrowUp move focus and selection through the rendered rows", () => {
+    render(<SourceListView />);
+    const first = rows()[0]!;
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(rows()[1]);
+    expect(selectedName()).toBe(rows()[1]!.dataset.id);
+    fireEvent.keyDown(rows()[1]!, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(rows()[0]);
+    expect(selectedName()).toBe(rows()[0]!.dataset.id);
+  });
+
+  it("Home and End jump to the ends of the list", () => {
+    render(<SourceListView />);
+    const last = rows()[rows().length - 1]!;
+    last.focus();
+    fireEvent.keyDown(last, { key: "Home" });
+    expect(document.activeElement).toBe(rows()[0]);
+    expect(selectedName()).toBe(rows()[0]!.dataset.id);
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: "End" });
+    expect(document.activeElement).toBe(rows()[rows().length - 1]);
+  });
+
+  it("Enter connects the focused host, Space only selects it", async () => {
+    render(<SourceListView />);
+    const item2 = rows().find((el) => el.dataset.name === "item2")!;
+    item2.focus();
+    fireEvent.keyDown(item2, { key: " " });
+    expect(selectedName()).toBe("item2");
+    expect(tabIdsOf(useAppStore.getState(), "item2")).toHaveLength(0);
+    fireEvent.keyDown(item2, { key: "Enter" });
+    expect(tabIdsOf(useAppStore.getState(), "item2")).toHaveLength(1);
+    await vi.waitFor(() => expect(callsTo(backend, "spawn_session").length).toBeGreaterThan(0));
+  });
+
+  it("arrow keys skip the rows of a collapsed group", () => {
+    render(<SourceListView />);
+    act(() => useAppStore.getState().updateSettings({ collapsedGroups: ["Lab"] }));
+    const visible = rows().map((el) => el.dataset.name);
+    expect(visible).not.toContain("item2");
+    rows()[0]!.focus();
+    fireEvent.keyDown(rows()[0]!, { key: "ArrowDown" });
+    expect(document.activeElement!.getAttribute("data-name")).toBe(visible[1]);
+  });
+
+  it("a filter that matches nothing says so instead of an empty list", () => {
+    render(<SourceListView />);
+    act(() => useAppStore.getState().setFilter("zzz-nothing"));
+    expect(rows()).toHaveLength(0);
+    expect(screen.getByTestId("filter-no-match").textContent).toBe(strings.filterNoMatch);
   });
 });

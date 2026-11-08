@@ -1,5 +1,10 @@
 use std::path::PathBuf;
 
+/// Justified panic (plan 12.1): a GUI session always has HOME - systemd,
+/// GDM and every display manager set it before starting the app, and Tauri's
+/// own builder already needs a readable home for the log plugin. A process
+/// without HOME cannot run FastSSH at all, so mapping this to AppError would
+/// only move the failure into a modal that says "HOME is not set".
 fn home() -> PathBuf {
     dirs::home_dir().expect("HOME must be set")
 }

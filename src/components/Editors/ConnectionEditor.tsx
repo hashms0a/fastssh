@@ -97,7 +97,7 @@ export function ConnectionEditor({ seed, mode }: { seed: Host; mode: EditorMode 
             <input
               id="ce-name"
               data-testid="field-name"
-
+              data-autofocus
               aria-invalid={errorOn("name") !== undefined}
               className={inputClass}
               value={draft.name}

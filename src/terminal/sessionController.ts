@@ -1,5 +1,6 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { Terminal } from "@xterm/xterm";
+import { errorText } from "../lib/errorText";
 import { ipc } from "../lib/ipc";
 import { logError } from "../lib/log";
 import { newId } from "../lib/ids";
@@ -66,6 +67,8 @@ function wireStdio(tabId: string, entry: Entry): void {
     if (sid) writeTab(tabId, sid, data);
   });
   entry.term.onResize(({ cols, rows }) => {
+    // Justified log-only (plan 12.1): a resize of a session that already
+    // exited is a no-op, and there is no user action left to report on.
     const sid = sessionIdOf(tabId);
     if (sid) ipc.resizePty(sid, cols, rows).catch((e) => logError("resize_pty failed", e));
   });
@@ -133,7 +136,7 @@ async function startSession(tabId: string, host: Host, sessionId: string): Promi
     forgetRemote(tabId);
     useAppStore.getState().removeTab(tabId);
     dispose(tabId);
-    useAppStore.getState().pushToast(String(err), "error");
+    useAppStore.getState().pushToast(errorText(err), "error");
     return;
   }
 
@@ -189,6 +192,12 @@ export async function retryTab(tabId: string): Promise<void> {
   await startSession(tabId, host, sessionId);
 }
 
+/**
+ * Closing a tab, retrying it, or a spawn that finished after the tab was
+ * already gone. `kill_session` on a session that exited by itself answers
+ * "no session", which is the wanted end state - so these three failures are
+ * logged, not toasted (plan 12.1). `RunEvent::Exit` still kills everything.
+ */
 export function closeTab(tabId: string): void {
   const st = useAppStore.getState();
   const tab = st.tabs[tabId];

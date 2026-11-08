@@ -8,7 +8,7 @@ import { ipc } from "./ipc";
 import { strings } from "./strings";
 import { errorText } from "./errorText";
 import { browserTarget } from "./sftpTarget";
-import { logInfo } from "./log";
+import { logError, logInfo } from "./log";
 import { useAppStore } from "../store/useAppStore";
 import type { Host } from "../types/models";
 
@@ -33,6 +33,7 @@ export async function showFileBrowserFor(host: Host): Promise<void> {
     const method = await ipc.openSftpFileBrowser(target.user, target.host, target.port);
     logInfo(`open_sftp ${target.host}:${target.port} via ${method}`);
   } catch (e) {
+    logError(`open_sftp ${target.host}:${target.port} failed`, e);
     const message = errorText(e);
     // Section 2: the toast names the address and offers a Copy button.
     st.pushToast(message, "error", urlInMessage(message) ?? undefined);

@@ -3,6 +3,7 @@ import type { Account, Bookmark, Host } from "../../types/models";
 import { LOCALHOST_HOST } from "../../types/models";
 import type { LoadReport } from "../../lib/ipc";
 import { ipc } from "../../lib/ipc";
+import { errorText } from "../../lib/errorText";
 import { logError } from "../../lib/log";
 import type { AppStore } from "../useAppStore";
 
@@ -46,7 +47,7 @@ function makeSaver<K extends "hosts" | "accounts" | "bookmarks">(
       .catch((e) => {
         if (my === token) set({ [key]: previous } as unknown as Partial<AppStore>);
         logError(`save_${key} failed`, e);
-        get().pushToast(String(e), "error");
+        get().pushToast(errorText(e), "error");
         return false;
       });
   };

@@ -18,8 +18,8 @@ mod settings_io;
 pub(crate) use library::data_dir;
 pub use library::{load_all, report_from, save_accounts, save_bookmarks, save_hosts};
 pub use settings_io::{
-    load_settings, load_settings_from, load_settings_with_warnings, save_settings,
-    save_settings_to, settings_path,
+    load_settings, load_settings_for_boot, load_settings_from, load_settings_with_warnings,
+    save_settings, save_settings_to, settings_path, take_boot_warnings,
 };
 
 /// The three files that make up the library (`hosts_folder` shares them).
@@ -109,9 +109,16 @@ pub fn data_dir_for(
     } else {
         paths::expand_tilde(hosts_folder)
     };
+    // Only a folder we just made gets the private mode. Re-chmodding a folder
+    // the user already owns would quietly undo what they set (a read-only
+    // mount, a shared group), and the save error that should reach the UI
+    // would never happen.
+    let pre_existing = dir.exists();
     match fs::create_dir_all(&dir) {
         Ok(()) => {
-            let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o700));
+            if !pre_existing {
+                let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o700));
+            }
             dir
         }
         Err(e) => {

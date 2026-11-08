@@ -3,13 +3,13 @@ import type { ReactNode } from "react";
 /** Shared editor primitives (Stage 3) - markup only, no logic. */
 
 export const inputClass =
-  "w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-sm outline-none focus:border-[var(--accent)]";
+  "w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-sm focus:border-[var(--accent)]";
 
 export const buttonClass =
   "rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-sm hover:bg-[var(--bg-alt)] disabled:opacity-60";
 
 export const primaryButtonClass =
-  "rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60";
+  "rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--on-accent)] hover:opacity-90 disabled:opacity-60";
 
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (

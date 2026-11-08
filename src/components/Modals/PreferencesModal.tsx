@@ -2,6 +2,8 @@ import { useState, type KeyboardEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { strings } from "../../lib/strings";
 import { ipc } from "../../lib/ipc";
+import { errorText } from "../../lib/errorText";
+import { logError } from "../../lib/log";
 import { changeHostsFolder } from "../../lib/hostsFolder";
 import { useSyncToggle } from "../../hooks/useSyncToggle";
 import { useEncryptToggle } from "../../hooks/useEncryptToggle";
@@ -45,24 +47,33 @@ export function PreferencesModal() {
 
   const applyFolder = async (value: string, el?: HTMLInputElement | null): Promise<void> => {
     const next = value.trim();
-    if (!next || next === settings.hostsFolder) {
+    const revert = (): void => {
       if (el) el.value = settings.hostsFolder;
       setFolder(settings.hostsFolder);
+    };
+    if (!next || next === settings.hostsFolder) {
+      revert();
       return;
     }
-    const result = await changeHostsFolder({
-      folder: next,
-      hasLibrary: ipc.folderHasLibrary,
-      confirm: (title, message) => confirm({ title, message }),
-      setFolder: ipc.setHostsFolder,
-      applyReport: hydrate,
-      updateSettings,
-      toast: pushToast,
-    });
-    // Cancel or a failed command puts the old path back in the field (8.3).
-    if (result === "cancelled" || result === "failed") {
-      if (el) el.value = settings.hostsFolder;
-      setFolder(settings.hostsFolder);
+    try {
+      const result = await changeHostsFolder({
+        folder: next,
+        hasLibrary: ipc.folderHasLibrary,
+        confirm: (title, message) => confirm({ title, message }),
+        setFolder: ipc.setHostsFolder,
+        applyReport: hydrate,
+        updateSettings,
+        toast: pushToast,
+        log: logError,
+      });
+      // Cancel or a failed command puts the old path back in the field (8.3).
+      if (result === "cancelled" || result === "failed") revert();
+    } catch (e) {
+      // `folder_has_library` runs before changeHostsFolder's own try/catch,
+      // so a failure there would otherwise vanish (plan 12.1).
+      logError("set_hosts_folder flow failed", e);
+      pushToast(errorText(e), "error");
+      revert();
     }
   };
 
@@ -141,6 +152,8 @@ export function PreferencesModal() {
           <button
             type="button"
             role="tab"
+            id="prefs-tab-general"
+            aria-controls="prefs-panel"
             data-testid="prefs-tab-general"
             aria-selected={tab === "general"}
             className={tabClass(tab === "general")}
@@ -151,6 +164,8 @@ export function PreferencesModal() {
           <button
             type="button"
             role="tab"
+            id="prefs-tab-appearance"
+            aria-controls="prefs-panel"
             data-testid="prefs-tab-appearance"
             aria-selected={tab === "appearance"}
             className={tabClass(tab === "appearance")}
@@ -160,7 +175,12 @@ export function PreferencesModal() {
           </button>
         </div>
 
-        <div className="flex flex-col gap-2 overflow-y-auto">
+        <div
+          role="tabpanel"
+          id="prefs-panel"
+          aria-labelledby={tab === "general" ? "prefs-tab-general" : "prefs-tab-appearance"}
+          className="flex flex-col gap-2 overflow-y-auto"
+        >
           {tab === "general" ? (
             <>
               <TextRow

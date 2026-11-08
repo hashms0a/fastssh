@@ -30,6 +30,7 @@ export function TerminalPane({ tabId, visible }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const hostId = useAppStore((s) => s.tabs[tabId]?.hostId ?? "");
+  const hostName = useAppStore((s) => s.hosts.find((h) => h.id === s.tabs[tabId]?.hostId)?.name ?? "");
   const isRemote = useAppStore((s) => {
     const host = s.hosts.find((h) => h.id === s.tabs[tabId]?.hostId);
     return !!host && host.local !== true;
@@ -77,6 +78,8 @@ export function TerminalPane({ tabId, visible }: Props) {
       data-testid="terminal-pane"
       data-tab-id={tabId}
       data-host-id={hostId}
+      role="region"
+      aria-label={strings.terminalLabel(hostName)}
       className={`h-full w-full ${visible ? "" : "hidden"}`}
       onContextMenu={(e) => {
         e.preventDefault();

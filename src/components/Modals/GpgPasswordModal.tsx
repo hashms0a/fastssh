@@ -97,7 +97,9 @@ export function GpgPasswordModal({ mode }: { mode: PassModalMode }) {
     setPass("");
     setAgain("");
     if (mode === "unlock") {
-      await cancelUnlock(unlockDeps);
+      const r = await cancelUnlock(unlockDeps);
+      // Quit failed: the app stays open and locked, so the modal says why.
+      if (r.message) setError(r.message);
       return;
     }
     closePassModal();

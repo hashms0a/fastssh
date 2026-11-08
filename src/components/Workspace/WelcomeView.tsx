@@ -25,7 +25,7 @@ export function WelcomeView() {
         type="button"
         data-testid={accountsSide ? "new-account" : "welcome-new-connection"}
         title={accountsSide ? strings.newAccount : strings.newConnection}
-        className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:opacity-90 disabled:opacity-60"
+        className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-[var(--on-accent)] hover:opacity-90 disabled:opacity-60"
         onClick={accountsSide ? addAccount : addHost}
       >
         {accountsSide ? strings.newAccount : strings.newConnection}
@@ -35,7 +35,7 @@ export function WelcomeView() {
           type="button"
           data-testid="welcome-import-easyssh"
           title={strings.importEasyssh}
-          className="rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white disabled:opacity-60"
+          className="rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--on-accent)] disabled:opacity-60"
           onClick={() => void importEasysshNow()}
         >
           {strings.importEasysshCount(legacyHosts)}

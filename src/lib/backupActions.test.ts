@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { strings } from "./strings";
 import { backupNow, backupToPickedFile, lockLibraryNow } from "./backupActions";
 import { callsTo, installIpcMock, type MockBackend } from "../test/ipcMock";
 import { resetBackupGuard } from "./backup";
@@ -48,9 +49,13 @@ describe("header menu library-file actions (Stage 11)", () => {
     expect(useAppStore.getState().locked).toBe(true);
   });
 
-  it("a failed lock keeps the library unlocked", async () => {
+  it("a failed lock keeps the library unlocked and toasts the reason", async () => {
     backend.failNext("lock_library", "boom");
     expect(await lockLibraryNow()).toBe(false);
     expect(useAppStore.getState().locked).toBe(false);
+    expect(useAppStore.getState().toasts[0]).toMatchObject({
+      kind: "error",
+      message: strings.lockFailed,
+    });
   });
 });

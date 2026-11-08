@@ -34,7 +34,7 @@ pub struct AppState {
 pub fn run() {
     // Read synchronously before the window exists so the first frame has
     // the saved size (R19a).
-    let initial = storage::load_settings();
+    let initial = storage::load_settings_for_boot();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::new().build())
@@ -99,6 +99,8 @@ pub fn run() {
             commands::sync::disable_ssh_config_sync,
         ])
         .build(tauri::generate_context!())
+        // Justified panic (plan 12.1): a failed builder means no window, no
+        // plugins and no event loop - there is nothing left to report to.
         .expect("error while building FastSSH")
         .run(|app_handle, event| {
             // R20/plan Stage 4: every PTY child dies with the app, so no

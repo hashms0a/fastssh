@@ -4,12 +4,22 @@
  * machine-gun the user. Loudness/feel is a [human] check.
  */
 
+import { logWarn } from "../lib/log";
+
 const FREQUENCY_HZ = 880;
 const DURATION_S = 0.08;
 export const THROTTLE_MS = 200;
 
 let lastRingAt = Number.NEGATIVE_INFINITY;
 let ctx: AudioContext | null = null;
+let audioIssueLogged = false;
+
+/** A session with no audio device fails on every bell; say it once (12.1). */
+function logAudioIssue(what: string, e: unknown): void {
+  if (audioIssueLogged) return;
+  audioIssueLogged = true;
+  logWarn(`audible bell unavailable (${what}): ${String(e)}`);
+}
 
 /** Pure rule so the throttle is unit-testable without audio. */
 export function shouldRing(now: number, last: number): boolean {
@@ -31,9 +41,12 @@ export function ringBell(enabled: () => boolean): void {
   if (!enabled() || !shouldRing(now, lastRingAt)) return;
   lastRingAt = now;
   const ac = audioContext();
-  if (!ac) return;
+  if (!ac) {
+    logAudioIssue("AudioContext", "unsupported in this WebKit build");
+    return;
+  }
   try {
-    void ac.resume?.().catch(() => {});
+    void ac.resume?.().catch((e: unknown) => logAudioIssue("resume", e));
     const osc = ac.createOscillator();
     const gain = ac.createGain();
     osc.type = "sine";
@@ -43,8 +56,10 @@ export function ringBell(enabled: () => boolean): void {
     gain.connect(ac.destination);
     osc.start();
     osc.stop(ac.currentTime + DURATION_S);
-  } catch {
-    // No audio device in this session: the bell stays silent.
+  } catch (e) {
+    // No audio device in this session: the bell stays silent, and the log
+    // says so once instead of swallowing the reason (12.1).
+    logAudioIssue("oscillator", e);
   }
 }
 
@@ -52,6 +67,7 @@ export function ringBell(enabled: () => boolean): void {
 export function resetBell(): void {
   lastRingAt = Number.NEGATIVE_INFINITY;
   ctx = null;
+  audioIssueLogged = false;
 }
 
 /** Only for tests: when the last beep started, so the throttle is assertable. */

@@ -1,21 +1,30 @@
-import { useMemo } from "react";
+import { useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { strings } from "../../lib/strings";
+import { sidebarAction } from "../../lib/sidebarKeys";
 import { sortedAccounts, visibleGroups } from "../../lib/libraryView";
 import { connectHost } from "../../terminal/sessionController";
 import type { Host } from "../../types/models";
 import { useAppStore } from "../../store/useAppStore";
 import { toggleGroupCollapsed } from "../../store/slices/librarySlice";
+import { countRender } from "../../lib/renderLog";
 import { HostRow } from "./HostRow";
 import { AccountRow } from "./AccountRow";
+
+const ROW_SELECTOR = '[data-testid="host-row"], [data-testid="account-row"]';
 
 /**
  * Sidebar (R22): Hosts/Accounts segmented toggle, collapsible group
  * headers with counts (persisted in settings.collapsedGroups), natural
  * sorting, and filtering on name/host/username/group. The grouped list is
  * memoized on [hosts, filter] so typing stays smooth at 2000 hosts.
+ *
+ * Task 12.5: the list is a `listbox`; ArrowUp/Down/Home/End move the
+ * selection through the rendered rows, and Enter on a row connects it
+ * (`HostRow`) or opens its editor (`AccountRow`).
  */
 export function SourceListView() {
+  countRender("sidebar"); // task 12.4
   const hosts = useAppStore((s) => s.hosts);
   const accounts = useAppStore((s) => s.accounts);
   const mode = useAppStore((s) => s.sidebarMode);
@@ -25,10 +34,30 @@ export function SourceListView() {
   const selectedAccountId = useAppStore((s) => s.selectedAccountId);
   const collapsed = useAppStore((s) => s.settings.collapsedGroups);
   const store = useAppStore;
+  const listRef = useRef<HTMLDivElement>(null);
+  const selectHost = useAppStore((s) => s.selectHost);
+  const selectAccount = useAppStore((s) => s.selectAccount);
   const groups = useMemo(() => visibleGroups(hosts, filter), [hosts, filter]);
   const shownAccounts = useMemo(() => sortedAccounts(accounts), [accounts]);
 
   const onConnect = (host: Host) => void connectHost(host);
+
+  /** Arrow navigation; Enter/Space belong to the row itself. */
+  const onListKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>): void => {
+    const rows = [...(listRef.current?.querySelectorAll<HTMLElement>(ROW_SELECTOR) ?? [])];
+    const action = sidebarAction(e.key, rows.indexOf(e.target as HTMLElement), rows.length);
+    if (!action) return;
+    e.preventDefault();
+    const row = rows[action.index];
+    row?.focus();
+    const id = row?.dataset.id;
+    if (!id) return;
+    if (mode === "hosts") {
+      selectHost(id);
+    } else {
+      selectAccount(id);
+    }
+  };
 
   const tab = (value: "hosts" | "accounts", label: string) => (
     <button
@@ -37,7 +66,7 @@ export function SourceListView() {
       data-testid={`sidebar-toggle-${value}`}
       aria-pressed={mode === value}
       className={`flex-1 rounded px-2 py-1 text-sm ${
-        mode === value ? "bg-[var(--accent)] text-white" : "hover:bg-[var(--bg)]"
+        mode === value ? "bg-[var(--accent)] text-[var(--on-accent)]" : "hover:bg-[var(--bg)]"
       }`}
       onClick={() => setMode(value)}
     >
@@ -53,9 +82,20 @@ export function SourceListView() {
       </div>
 
       <div
+        ref={listRef}
         data-testid={mode === "hosts" ? "host-list" : "account-list"}
+        role="listbox"
+        aria-label={mode === "hosts" ? strings.connectionList : strings.accountList}
+        tabIndex={-1}
         className="min-h-0 flex-1 overflow-y-auto px-2 pb-2"
+        onKeyDown={onListKeyDown}
       >
+        {mode === "hosts" && groups.length === 0 && (
+          <p data-testid="filter-no-match" className="px-2 py-2 text-sm text-[var(--muted)]">
+            {strings.filterNoMatch}
+          </p>
+        )}
+
         {mode === "hosts" &&
           groups.map((g) => {
             const isCollapsed = collapsed.includes(g.name);

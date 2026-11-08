@@ -20,6 +20,10 @@ interface Props {
  * Generic positioned menu (sidebar rows, header menu). Closes on Escape,
  * outside click, window blur and scroll. Clamped so it never renders
  * off-screen at the right/bottom edge.
+ *
+ * Task 12.5: opening moves focus to the first enabled item, ArrowUp/Down
+ * (plus Home/End) walk the items, and closing puts focus back on the control
+ * that opened the menu.
  */
 export function ContextMenu({ x, y, items, onClose, testId = "context-menu" }: Props) {
   const ref = useRef<HTMLDivElement>(null);
@@ -35,13 +39,38 @@ export function ContextMenu({ x, y, items, onClose, testId = "context-menu" }: P
   }, [x, y]);
 
   useEffect(() => {
+    const enabled = () => [...(ref.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? [])];
+    const move = (delta: number) => {
+      const list = enabled();
+      if (list.length === 0) return;
+      const at = list.indexOf(document.activeElement as HTMLElement);
+      list[(at + delta + list.length) % list.length]?.focus();
+    };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        move(1);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        move(-1);
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        enabled()[0]?.focus();
+      } else if (e.key === "End") {
+        e.preventDefault();
+        enabled()[enabled().length - 1]?.focus();
+      }
     };
     const onPointer = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) onClose();
     };
     const close = () => onClose();
+    const opener = document.activeElement as HTMLElement | null;
+    enabled()[0]?.focus();
     // Capture phase: when the terminal has focus, xterm consumes Escape and
     // stops propagation, so a bubble-phase listener would never see it.
     window.addEventListener("keydown", onKey, true);
@@ -53,6 +82,7 @@ export function ContextMenu({ x, y, items, onClose, testId = "context-menu" }: P
       window.removeEventListener("pointerdown", onPointer, true);
       window.removeEventListener("blur", close);
       window.removeEventListener("scroll", close, true);
+      if (document.contains(opener ?? null)) opener?.focus?.();
     };
   }, [onClose]);
 
@@ -72,7 +102,7 @@ export function ContextMenu({ x, y, items, onClose, testId = "context-menu" }: P
           data-testid={`${testId}-item`}
           title={item.title}
           disabled={item.disabled}
-          className="block w-full px-3 py-1 text-left text-sm hover:bg-[var(--accent)] hover:text-white disabled:opacity-50"
+          className="block w-full px-3 py-1 text-left text-sm hover:bg-[var(--accent)] hover:text-[var(--on-accent)] disabled:opacity-50"
           onClick={() => {
             onClose();
             item.run();

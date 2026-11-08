@@ -25,7 +25,7 @@ export function ConnectionLanding({ host }: { host: Host }) {
         <button
           type="button"
           data-testid="landing-connect"
-          className="flex-1 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+          className="flex-1 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--on-accent)] hover:opacity-90"
           onClick={() => void connectHost(host)}
         >
           {strings.connect}

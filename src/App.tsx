@@ -48,13 +48,14 @@ export default function App() {
       <div className="flex min-h-0 flex-1">
         <aside
           data-testid="sidebar"
+          aria-label={strings.sidebarRegion}
           style={{ width: panelSize }}
           className="shrink-0 border-r border-[var(--border)] bg-[var(--bg-alt)]"
         >
           <SourceListView />
         </aside>
         <Splitter />
-        <main className="relative flex min-w-0 flex-1 flex-col">
+        <main className="relative flex min-w-0 flex-1 flex-col" aria-label={strings.workspace}>
           <Workspace />
           {/* Editors float over the workspace; notebooks stay mounted. */}
           <EditorOverlay />

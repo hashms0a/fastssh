@@ -3,7 +3,9 @@ import { createRoot } from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import App from "./App";
 import { BootError } from "./components/BootError";
+import { errorText } from "./lib/errorText";
 import { ipc } from "./lib/ipc";
+import { logError } from "./lib/log";
 import { installTestHook } from "./lib/testHook";
 import { useAppStore } from "./store/useAppStore";
 import "./index.css";
@@ -20,7 +22,9 @@ async function boot() {
       </StrictMode>,
     );
   } catch (e) {
-    root.render(<BootError error={String(e)} />);
+    // The boot error is on screen (BootError) and in the log for bug reports.
+    logError("load_all failed at boot", e);
+    root.render(<BootError error={errorText(e)} />);
   }
   await getCurrentWindow().show(); // Rust force-shows after 5 s anyway
 }

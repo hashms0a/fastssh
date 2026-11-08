@@ -4,7 +4,7 @@
 
 use super::{
     LIBRARY_FILES, Library, LoadReport, data_dir_for, ensure_config_dir, ensure_file_mode,
-    load_settings_with_warnings, parse_array, read_array,
+    load_settings_with_warnings, parse_array, read_array, take_boot_warnings,
 };
 use crate::crypto::{self, LibraryCrypto};
 use crate::error::AppError;
@@ -152,6 +152,9 @@ pub fn load_all(crypto: &LibraryCrypto) -> Result<LoadReport, AppError> {
     let dir = data_dir_for(&settings.hosts_folder, &config_dir, &mut warnings);
     let mut report = report_from(&dir, settings, crypto)?;
     report.warnings.extend(warnings);
+    // Anything the pre-window settings read found (a corrupt file renamed
+    // aside) belongs on screen too.
+    report.warnings.extend(take_boot_warnings());
     for w in &report.warnings {
         log::warn!("load_all: {w}");
     }

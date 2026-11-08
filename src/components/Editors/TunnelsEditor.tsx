@@ -38,7 +38,7 @@ export function TunnelsEditor({ value, onChange, showErrors = false }: Props) {
           <button
             type="button"
             data-testid={`tunnel-remove-${i}`}
-            aria-label={`${strings.remove} ${strings.sectionTunnels} ${i + 1}`}
+            aria-label={strings.tunnelRemove(i + 1)}
             className="self-end rounded-md border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--bg-alt)]"
             onClick={() => onChange(parts.filter((_, j) => j !== i).join(","))}
           >
@@ -51,6 +51,7 @@ export function TunnelsEditor({ value, onChange, showErrors = false }: Props) {
               <input
                 type="text"
                 data-testid={`tunnel-raw-${i}`}
+                aria-label={strings.tunnelRuleInvalid}
                 aria-invalid
                 className={`${inputClass} border-[var(--danger)] font-mono`}
                 value={part}
@@ -63,7 +64,7 @@ export function TunnelsEditor({ value, onChange, showErrors = false }: Props) {
         return (
           <div key={rule.id} className="flex flex-wrap items-end gap-2" data-testid={`tunnel-row-${i}`}>
             <label className="w-28">
-              <span className="mb-1 block text-xs text-[var(--muted)]">Type</span>
+              <span className="mb-1 block text-xs text-[var(--muted)]">{strings.labelTunnelType}</span>
               <select
                 data-testid={`tunnel-type-${i}`}
                 className={inputClass}
@@ -75,7 +76,7 @@ export function TunnelsEditor({ value, onChange, showErrors = false }: Props) {
               </select>
             </label>
             <label className="w-28">
-              <span className="mb-1 block text-xs text-[var(--muted)]">Source port</span>
+              <span className="mb-1 block text-xs text-[var(--muted)]">{strings.labelTunnelSourcePort}</span>
               <input
                 type="number"
                 data-testid={`tunnel-source-${i}`}
@@ -85,7 +86,7 @@ export function TunnelsEditor({ value, onChange, showErrors = false }: Props) {
               />
             </label>
             <label className="min-w-32 flex-1">
-              <span className="mb-1 block text-xs text-[var(--muted)]">Destination host</span>
+              <span className="mb-1 block text-xs text-[var(--muted)]">{strings.labelTunnelDestHost}</span>
               <input
                 type="text"
                 data-testid={`tunnel-dest-host-${i}`}
@@ -95,7 +96,7 @@ export function TunnelsEditor({ value, onChange, showErrors = false }: Props) {
               />
             </label>
             <label className="w-28">
-              <span className="mb-1 block text-xs text-[var(--muted)]">Dest. port</span>
+              <span className="mb-1 block text-xs text-[var(--muted)]">{strings.labelTunnelDestPort}</span>
               <input
                 type="number"
                 data-testid={`tunnel-dest-port-${i}`}

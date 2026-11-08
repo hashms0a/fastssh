@@ -31,7 +31,7 @@ export function Toasts() {
           key={`w:${w}`}
           data-testid="warning-line"
           role="alert"
-          className="flex items-start gap-3 rounded-md bg-[var(--danger)] px-3 py-2 text-sm text-white shadow-lg pointer-events-auto"
+          className="flex items-start gap-3 rounded-md bg-[var(--danger)] px-3 py-2 text-sm text-[var(--on-danger)] shadow-lg pointer-events-auto"
         >
           <span className="min-w-0 break-words">{w}</span>
           <button
@@ -53,7 +53,7 @@ export function Toasts() {
           role={t.kind === "error" ? "alert" : "status"}
           className={`pointer-events-auto flex items-start gap-3 rounded-md px-3 py-2 text-sm shadow-lg ${
             t.kind === "error"
-              ? "bg-[var(--danger)] text-white"
+              ? "bg-[var(--danger)] text-[var(--on-danger)]"
               : "bg-[var(--bg-alt)] text-[var(--fg)] border border-[var(--border)]"
           }`}
         >
@@ -66,7 +66,10 @@ export function Toasts() {
               onClick={() => {
                 copyText(t.copy ?? "")
                   .then(() => useAppStore.getState().pushToast(strings.copiedUrl))
-                  .catch((e) => logError("toast copy failed", e));
+                  .catch((e) => {
+                    logError("toast copy failed", e);
+                    useAppStore.getState().pushToast(strings.copyFailed, "error");
+                  });
               }}
             >
               {strings.clipboardCopy}

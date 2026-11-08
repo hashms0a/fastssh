@@ -61,8 +61,10 @@ export async function cancelUnlock(d: UnlockDeps): Promise<UnlockResult> {
     await d.quit();
     return { outcome: "quit" };
   } catch (e) {
+    // The app is still running and still locked, so the modal says why
+    // nothing happened (plan 12.1).
     d.log("quit_app failed", e);
-    return { outcome: "cancelled" };
+    return { outcome: "cancelled", message: strings.quitFailed };
   }
 }
 
@@ -88,6 +90,8 @@ export interface LockDeps {
   lock: () => Promise<void>;
   /** store.setLocked(true) - `App.tsx` then shows the unlock modal again. */
   setLocked: (locked: boolean) => void;
+  /** Only for the failure: the menu item must say the lock did not happen. */
+  toast: (message: string) => void;
   log: (message: string, error: unknown) => void;
 }
 
@@ -104,6 +108,7 @@ export async function lockLibrary(d: LockDeps): Promise<boolean> {
     return true;
   } catch (e) {
     d.log("lock_library failed", e);
+    d.toast(strings.lockFailed);
     return false;
   }
 }

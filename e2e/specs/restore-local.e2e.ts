@@ -84,8 +84,13 @@ describe("restore local shells (Stage 11, P3)", () => {
     const ids = await hookTabIds();
     await expectPrompt(ids[0]!, process.env.USER ?? "dev");
     await expectPrompt(ids[1]!, process.env.USER ?? "dev");
-    // The list is cleared, so a crash before the next quit does not restore twice.
-    await browser.waitUntil(async () => openedHostsFromDisk().length === 0, { timeout: 10000, interval: 400 });
+    // Task 12.3: every save writes the tabs that are open now, so the file
+    // still names these two shells. A crash after a restore therefore reopens
+    // what was really open, instead of a list from the run before.
+    await browser.waitUntil(
+      () => openedHostsFromDisk().length === 1 && openedHostsFromDisk()[0]?.hostName === "Localhost",
+      { timeout: 10000, interval: 400 },
+    );
   });
 
   it("with the setting off, a Localhost-only run restores nothing", async () => {

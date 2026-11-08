@@ -100,6 +100,22 @@ fn settings_missing_gives_defaults_and_corrupt_renames() {
 }
 
 #[test]
+fn a_corrupt_settings_file_warns_the_ui_once() {
+    let d = tmp();
+    let _g = crate::paths::ENV_LOCK.lock().unwrap();
+    // SAFETY: the tests touching the process environment are serialized by ENV_LOCK.
+    unsafe { std::env::set_var("FASTSSH_CONFIG_DIR", d.path()) };
+    fs::write(d.path().join("settings.json"), b"{ not json").unwrap();
+
+    // What lib.rs does before the window exists: defaults, and the reason.
+    assert_eq!(load_settings_for_boot(), AppSettings::default());
+    let w = take_boot_warnings();
+    assert_eq!(w.len(), 2, "parse error + rename notice");
+    assert!(w[0].contains("settings.json"));
+    assert!(take_boot_warnings().is_empty(), "reported once");
+}
+
+#[test]
 fn settings_round_trip_through_disk() {
     let d = tmp();
     let p = d.path().join("settings.json");
@@ -144,6 +160,23 @@ fn data_dir_creates_custom_folder_0700_and_falls_back() {
     let got2 = data_dir_for(&bad, &fb, &mut w);
     assert_eq!(got2, fb);
     assert_eq!(w.len(), 1, "fallback warns");
+}
+
+#[test]
+fn an_existing_folder_keeps_the_mode_the_user_gave_it() {
+    let d = tmp();
+    let mut w = vec![];
+    let target = d.path().join("ro");
+    fs::create_dir(&target).unwrap();
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o500)).unwrap();
+    let got = data_dir_for(&target.to_string_lossy(), &d.path().join("cfg"), &mut w);
+    assert_eq!(got, target);
+    assert!(w.is_empty());
+    assert_eq!(
+        fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+        0o500,
+        "a read-only library folder stays read-only"
+    );
 }
 
 #[test]

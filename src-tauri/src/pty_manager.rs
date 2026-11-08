@@ -47,6 +47,18 @@ pub struct PtyManager {
 
 const READ_BUF: usize = 16 * 1024;
 
+/// A poisoned sessions map is useless only if a panic lost data mid-update;
+/// nothing here can panic while holding the lock. Recovering the inner value
+/// instead of unwrapping keeps `kill_all()` running at exit, so no ssh child
+/// is orphaned (R20) even if some other thread panicked.
+fn lock_sessions(
+    sessions: &Arc<Mutex<HashMap<String, Session>>>,
+) -> std::sync::MutexGuard<'_, HashMap<String, Session>> {
+    sessions
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 impl PtyManager {
     /// Spawn `spec` in a new PTY and register it under `session_id`.
     pub fn spawn(
@@ -96,7 +108,7 @@ impl PtyManager {
         }
 
         let killer = child.clone_killer();
-        self.sessions.lock().unwrap().insert(
+        lock_sessions(&self.sessions).insert(
             session_id.clone(),
             Session {
                 writer,
@@ -126,14 +138,14 @@ impl PtyManager {
         let sessions = self.sessions.clone();
         std::thread::spawn(move || {
             let code = child.wait().map(|s| s.exit_code() as i32).unwrap_or(-1);
-            sessions.lock().unwrap().remove(&session_id);
+            lock_sessions(&sessions).remove(&session_id);
             emitter.emit_exit(&session_id, code);
         });
         Ok(())
     }
 
     pub fn write(&self, session_id: &str, data: &str) -> Result<(), String> {
-        let mut map = self.sessions.lock().unwrap();
+        let mut map = lock_sessions(&self.sessions);
         match map.get_mut(session_id) {
             Some(s) => {
                 s.writer
@@ -147,7 +159,7 @@ impl PtyManager {
     }
 
     pub fn resize(&self, session_id: &str, cols: u16, rows: u16) -> Result<(), String> {
-        let map = self.sessions.lock().unwrap();
+        let map = lock_sessions(&self.sessions);
         match map.get(session_id) {
             Some(s) => s
                 .master
@@ -163,21 +175,21 @@ impl PtyManager {
     }
 
     pub fn kill(&self, session_id: &str) {
-        if let Some(mut s) = self.sessions.lock().unwrap().remove(session_id) {
+        if let Some(mut s) = lock_sessions(&self.sessions).remove(session_id) {
             let _ = s.killer.kill();
         }
     }
 
     /// RunEvent::Exit: no ssh/sh process may outlive the app.
     pub fn kill_all(&self) {
-        let mut map = self.sessions.lock().unwrap();
+        let mut map = lock_sessions(&self.sessions);
         for (_, mut s) in map.drain() {
             let _ = s.killer.kill();
         }
     }
 
     pub fn session_count(&self) -> usize {
-        self.sessions.lock().unwrap().len()
+        lock_sessions(&self.sessions).len()
     }
 }
 
