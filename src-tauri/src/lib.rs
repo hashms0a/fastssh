@@ -1,8 +1,11 @@
 pub mod commands;
+pub mod crypto;
 pub mod env_sanitize;
 pub mod error;
 pub mod file_browser;
+pub mod gpg;
 pub mod hosts_folder;
+pub mod legacy_import;
 pub mod models;
 pub mod paths;
 pub mod pty_manager;
@@ -16,11 +19,14 @@ pub mod utf8_chunker;
 use std::sync::Mutex;
 use tauri::Manager;
 
-/// Shared state: current settings (Stage 1) and the GPG passphrase
-/// (Stage 10; unused until then).
+/// Shared state: the current settings (Stage 1) and the GPG passphrase the
+/// user unlocked the library with (Stage 10). The passphrase is Rust-only: it
+/// is never written to a file, never logged, and never handed to the frontend.
 pub struct AppState {
     pub settings: Mutex<settings::AppSettings>,
     pub passphrase: Mutex<Option<String>>,
+    /// The host `gpg` binary, shared by every crypto call.
+    pub runner: std::sync::Arc<gpg::GpgRunner>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -36,6 +42,7 @@ pub fn run() {
         .manage(AppState {
             settings: Mutex::new(initial.clone()),
             passphrase: Mutex::new(None),
+            runner: std::sync::Arc::new(gpg::GpgRunner::system()),
         })
         .manage(pty_manager::PtyManager::default())
         .setup(move |app| {
@@ -75,6 +82,11 @@ pub fn run() {
             commands::library::save_settings,
             commands::library::folder_has_library,
             commands::library::set_hosts_folder,
+            commands::crypto::crypto_info,
+            commands::crypto::unlock_library,
+            commands::crypto::set_encryption,
+            commands::crypto::start_empty_library,
+            commands::crypto::import_easyssh,
             commands::session::spawn_session,
             commands::session::write_pty,
             commands::session::resize_pty,

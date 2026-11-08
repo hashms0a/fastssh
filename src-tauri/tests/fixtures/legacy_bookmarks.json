@@ -1,0 +1,4 @@
+[
+  { "name": "uptime", "command": "uptime" },
+  { "name": "disk", "command": "df -h" }
+]

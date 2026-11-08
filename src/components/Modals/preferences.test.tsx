@@ -88,12 +88,38 @@ describe("Preferences modal (task 8.1)", () => {
     expect(useAppStore.getState().settings.scrollbackLines).toBe(100000);
   });
 
-  it("General: Restore toggles, Encrypt is still disabled", () => {
+  it("General: Restore toggles; Encrypt opens the passphrase modal", () => {
     const spy = watchUpdates();
     render(<PreferencesModal />);
     fireEvent.click(screen.getByTestId("prefs-restore-hosts"));
     expect(spy).toHaveBeenCalledWith({ restoreHosts: true });
-    expect((screen.getByTestId("prefs-encrypt") as HTMLInputElement).disabled).toBe(true);
+    // Stage 10 un-disabled the Encrypt switch: ticking it asks for a
+    // passphrase first, it does not write the flag itself.
+    const box = screen.getByTestId("prefs-encrypt") as HTMLInputElement;
+    expect(box.disabled).toBe(false);
+    fireEvent.click(box);
+    expect(useAppStore.getState().passModal).toBe("set");
+    expect(spy).not.toHaveBeenCalledWith({ encryptData: true });
+  });
+
+  // Task 10.5: gpg missing means the switch is off-limits with the plan's
+  // tooltip, not a save that fails on the first encrypt.
+  it("Encrypt is disabled with the gnupg tooltip when gpg is missing", async () => {
+    mockIPC((cmd) => (cmd === "crypto_info" ? { available: false } : null));
+    useAppStore.getState().hydrate(emptyReport({ settings: DEFAULT_SETTINGS }));
+    render(<PreferencesModal />);
+    const box = await screen.findByTestId("prefs-encrypt");
+    expect((box as HTMLInputElement).disabled).toBe(true);
+    expect(box.getAttribute("title")).toBe("Install gnupg to enable encryption");
+  });
+
+  // Turning encryption off must re-ask for the current passphrase.
+  it("unticking Encrypt opens the confirm-current-passphrase modal", () => {
+    useAppStore.getState().hydrate(emptyReport({ settings: { ...DEFAULT_SETTINGS, encryptData: true } }));
+    render(<PreferencesModal />);
+    fireEvent.click(screen.getByTestId("prefs-encrypt"));
+    expect(useAppStore.getState().passModal).toBe("disable");
+    expect(useAppStore.getState().settings.encryptData).toBe(true);
   });
 
   // Stage 9 un-disabled "Sync SSH config": it asks before rewriting the file.

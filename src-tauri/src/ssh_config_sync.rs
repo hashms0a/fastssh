@@ -5,6 +5,7 @@
 //! FASTSSH_SSH_DIR: a test run can never touch the owner's ~/.ssh/config
 //! (rule 10, plan Stage 9 note).
 
+use crate::crypto::LibraryCrypto;
 use crate::error::AppError;
 use crate::models::Host;
 use crate::paths;
@@ -124,7 +125,11 @@ pub struct SyncReport {
 
 /// Task 9.6: backup, import, save the library, export, and (in the caller) set
 /// the flag. Nothing is written before the backup exists.
-pub fn enable(settings: &AppSettings, hosts: &[Host]) -> Result<SyncReport, AppError> {
+pub fn enable(
+    settings: &AppSettings,
+    hosts: &[Host],
+    crypto: &LibraryCrypto,
+) -> Result<SyncReport, AppError> {
     let ssh_dir = paths::ssh_dir();
     let backup_path = backup(&ssh_dir)?;
     let existing = read_config(&ssh_dir);
@@ -148,7 +153,7 @@ pub fn enable(settings: &AppSettings, hosts: &[Host]) -> Result<SyncReport, AppE
         sync_ssh_config: true,
         ..settings.clone()
     };
-    storage::save_hosts(&syncing, &merged)?;
+    storage::save_hosts(&syncing, &merged, crypto)?;
     // If the export fails the library is already saved; the error is shown and
     // the frontend leaves the flag off, so the next save does not half-sync.
     write_from_library(&ssh_dir, &merged)?;
@@ -166,8 +171,9 @@ pub fn enable(settings: &AppSettings, hosts: &[Host]) -> Result<SyncReport, AppE
 pub fn save_hosts_and_sync(
     settings: &AppSettings,
     hosts: &[Host],
+    crypto: &LibraryCrypto,
 ) -> Result<Option<String>, AppError> {
-    storage::save_hosts(settings, hosts)?;
+    storage::save_hosts(settings, hosts, crypto)?;
     if !settings.sync_ssh_config {
         return Ok(None);
     }

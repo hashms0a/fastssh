@@ -4,6 +4,7 @@ import { strings } from "../../lib/strings";
 import { ipc } from "../../lib/ipc";
 import { changeHostsFolder } from "../../lib/hostsFolder";
 import { useSyncToggle } from "../../hooks/useSyncToggle";
+import { useEncryptToggle } from "../../hooks/useEncryptToggle";
 import { toHex } from "../../lib/colors";
 import {
   MAX_FONT_SIZE,
@@ -37,6 +38,7 @@ export function PreferencesModal() {
   const { box, onKeyDown } = useDialogFocus<HTMLDivElement>();
   const [tab, setTab] = useState<"general" | "appearance">("general");
   const sync = useSyncToggle();
+  const enc = useEncryptToggle();
   // The folder field is the one owned by the modal: Browse fills it before
   // the confirm dialog decides whether the path is real.
   const [folder, setFolder] = useState(settings.hostsFolder);
@@ -194,12 +196,14 @@ export function PreferencesModal() {
                 onChange={(v) => void sync.run(v)}
               />
               <Check
+                key={`encrypt-${enc.tick}`}
                 testId="prefs-encrypt"
                 label={strings.encryptData}
-                hint={strings.encryptSoonHint}
+                hint={strings.encryptHint}
+                disabledTitle={strings.encryptNeedsGpg}
+                disabled={!enc.available}
                 checked={settings.encryptData}
-                disabled
-                onChange={() => undefined}
+                onChange={(v) => enc.run(v)}
               />
             </>
           ) : (

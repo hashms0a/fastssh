@@ -10,6 +10,13 @@ export type EditorMode = "add" | "edit";
 export type EditorRequest =
   { kind: "host"; mode: EditorMode; seed: Host } | { kind: "account"; mode: EditorMode; seed: Account };
 
+/**
+ * Which passphrase modal is open (task 10.4). `unlock` is driven by
+ * `librarySlice.locked`, so the store only ever holds `set` and `disable`;
+ * the mode type covers all three because `GpgPasswordModal` takes it.
+ */
+export type PassModalMode = "unlock" | "set" | "disable";
+
 export interface Toast {
   id: number;
   message: string;
@@ -48,6 +55,8 @@ export interface UiSlice {
   editor: EditorRequest | null;
   /** Stage 8 modal overlays; the two are mutually exclusive. */
   preferencesOpen: boolean;
+  /** Stage 10 passphrase modal (set/disable); unlock comes from `locked`. */
+  passModal: PassModalMode | null;
   aboutOpen: boolean;
   searchOpen: boolean;
   search: SearchState;
@@ -59,6 +68,8 @@ export interface UiSlice {
   setFilter: (filter: string) => void;
   openEditor: (req: EditorRequest) => void;
   closeEditor: () => void;
+  openPassModal: (mode: PassModalMode) => void;
+  closePassModal: () => void;
   openPreferences: () => void;
   closePreferences: () => void;
   openAbout: () => void;
@@ -83,6 +94,7 @@ export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set, get)
   toasts: [],
   editor: null,
   preferencesOpen: false,
+  passModal: null,
   aboutOpen: false,
   searchOpen: false,
   search: SEARCH_DEFAULT,
@@ -93,6 +105,8 @@ export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set, get)
   setFilter: (filter) => set({ filter }),
   openEditor: (req) => set({ editor: req }),
   closeEditor: () => set({ editor: null }),
+  openPassModal: (mode) => set({ passModal: mode }),
+  closePassModal: () => set({ passModal: null }),
   openPreferences: () => set({ preferencesOpen: true, aboutOpen: false }),
   closePreferences: () => set({ preferencesOpen: false }),
   openAbout: () => set({ aboutOpen: true, preferencesOpen: false }),

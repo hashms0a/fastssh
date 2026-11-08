@@ -15,6 +15,7 @@ import { Splitter } from "./components/Splitter";
 import { Workspace } from "./components/Workspace/Workspace";
 import { EditorOverlay } from "./components/Editors/EditorOverlay";
 import { ModalHost } from "./components/Modals/ModalHost";
+import { GpgPasswordModal } from "./components/Modals/GpgPasswordModal";
 import { PreferencesModal } from "./components/Modals/PreferencesModal";
 import { AboutDialog } from "./components/Modals/AboutDialog";
 import { Toasts } from "./components/Toasts";
@@ -24,6 +25,9 @@ export default function App() {
   const panelSize = useAppStore((s) => s.settings.panelSize);
   const preferencesOpen = useAppStore((s) => s.preferencesOpen);
   const aboutOpen = useAppStore((s) => s.aboutOpen);
+  // Stage 10: `locked` (a *.json.gpg with no passphrase) forces unlock mode.
+  const locked = useAppStore((s) => s.locked);
+  const passModal = useAppStore((s) => s.passModal);
   useWindowState();
   useWindowFocus();
   useCloseHandler();
@@ -64,6 +68,7 @@ export default function App() {
           </p>
         </main>
       </div>
+      {locked ? <GpgPasswordModal mode="unlock" /> : passModal ? <GpgPasswordModal mode={passModal} /> : null}
       <ModalHost />
       {/* Stage 8 overlays; the workspace and notebooks stay mounted behind. */}
       {preferencesOpen && <PreferencesModal />}

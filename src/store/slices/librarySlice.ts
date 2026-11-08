@@ -14,6 +14,8 @@ export interface LibrarySlice {
   /** True when a *.json.gpg file needs the passphrase (Stage 10). */
   locked: boolean;
   legacyAvailable: boolean;
+  /** Records in the legacy EasySSH hosts.json (the WelcomeView button). */
+  legacyHosts: number;
   /** Injects the load_all report before the first render (main.tsx). */
   hydrate: (report: LoadReport) => void;
   /** Optimistic write: state changes at once, an OS error rolls it back (3.12). */
@@ -69,6 +71,7 @@ export const createLibrarySlice: StateCreator<AppStore, [], [], LibrarySlice> = 
     warnings: [],
     locked: false,
     legacyAvailable: false,
+    legacyHosts: 0,
     hydrate: (report) => {
       document.documentElement.classList.toggle("dark", report.settings.useDarkTheme);
       // R8: the in-memory Localhost lives at the front of the library.
@@ -80,6 +83,7 @@ export const createLibrarySlice: StateCreator<AppStore, [], [], LibrarySlice> = 
         warnings: report.warnings,
         locked: report.locked,
         legacyAvailable: report.legacyAvailable,
+        legacyHosts: report.legacyHosts,
         settings: report.settings,
       });
     },

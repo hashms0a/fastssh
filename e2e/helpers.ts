@@ -17,13 +17,19 @@ export async function shot(stageDir: string, name: string): Promise<void> {
 export const byTestId = (id: string) => $(`[data-testid="${id}"]`);
 
 /** The fixture sets of Section 10 step 6. */
-export type FixtureSet = "empty" | "legacy" | "big" | "bad" | "sshconfig";
+export type FixtureSet = "empty" | "legacy" | "big" | "bad" | "sshconfig" | "locked";
 
 const SET_FILES: Record<FixtureSet, string[]> = {
   empty: [],
   legacy: ["legacy/hosts.json", "legacy/accounts.json", "legacy/bookmarks.json"],
   big: ["big/hosts.json", "legacy/accounts.json", "legacy/bookmarks.json"],
+  // bad/hosts.json.gpg is the "unsupported/corrupt gpg" fixture (Stage 10):
+  // its presence alone makes the app start locked.
   bad: ["bad/hosts.json", "bad/accounts.json", "bad/bookmarks.json", "bad/settings.json"],
+  // A library that looks encrypted and is unreadable: only the fake
+  // `hosts.json.gpg`, no plain twins (that is what an enabled library looks
+  // like), so the app really tries to decrypt it (task 10.2 / 10.3).
+  locked: ["bad/hosts.json.gpg"],
   sshconfig: ["legacy/hosts.json", "legacy/accounts.json", "legacy/bookmarks.json"],
 };
 
@@ -80,6 +86,19 @@ export function readConfigHosts(): Array<Record<string, unknown>> {
 
 export function writeConfigHosts(hosts: readonly unknown[]): void {
   fs.writeFileSync(path.join(configDir, "hosts.json"), JSON.stringify(hosts));
+}
+
+/** What the sandbox config dir holds (Stage 10: *.json.gpg, the .corrupt- aside). */
+export function configNames(): string[] {
+  return fs.readdirSync(configDir);
+}
+
+export function configExists(name: string): boolean {
+  return fs.existsSync(path.join(configDir, name));
+}
+
+export function readConfigFile(name: string): string {
+  return fs.readFileSync(path.join(configDir, name), "utf8");
 }
 
 /** Empties the sandbox known_hosts so ssh asks the fingerprint question. */
@@ -273,6 +292,13 @@ export async function selectedRowNames(): Promise<string[]> {
   return out;
 }
 
+/** Every host row name in the sidebar, in the order they are listed. */
+export async function allRowNames(): Promise<string[]> {
+  const out: string[] = [];
+  for (const el of await $$('[data-testid="host-row"]')) out.push((await el.getAttribute("data-name")) ?? "");
+  return out;
+}
+
 export async function clickRow(name: string): Promise<void> {
   const sel = `[data-testid="host-row"][data-name="${name}"]`;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -369,13 +395,23 @@ export async function contextMenuInPage(selector: string): Promise<void> {
 export async function typeInto(testId: string, text: string): Promise<void> {
   await (await byTestId(testId)).waitForExist({ timeout: 5000 });
   await browser.execute((id) => {
-    (document.querySelector(`[data-testid="${id}"]`) as HTMLElement | null)?.focus();
+    const el = document.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
+    el?.click(); // clicking focuses the field even when the window is inactive
+    el?.focus();
   }, testId);
   await browser.pause(150);
   for (const ch of text) {
     await browser.keys([ch === " " ? "Space" : ch]);
     await browser.pause(70);
   }
+  // The tauri window can be unfocused, and then the keystrokes reach nothing
+  // (the driver logs CDP 404 warnings). Check what landed and, if it did not,
+  // put the text in the field the way a keystroke would.
+  const got = await browser.execute(
+    (id) => (document.querySelector(`[data-testid="${id}"]`) as HTMLInputElement | null)?.value ?? "",
+    testId,
+  );
+  if (got !== text) await setInputValue(testId, text);
 }
 
 /** Replace a text field's content (a Preferences field commits on blur or

@@ -3,6 +3,11 @@
 //! sandbox and the owner's files are never involved (rule 10).
 
 use super::*;
+
+fn crypto() -> crate::crypto::LibraryCrypto {
+    crate::crypto::LibraryCrypto::unencrypted()
+}
+
 use crate::paths;
 use std::fs;
 use tempfile::TempDir;
@@ -63,6 +68,7 @@ fn copy_writes_the_three_files_with_mode_0600() {
         &settings_for(&from),
         &to.path().display().to_string(),
         "copy",
+        &crypto(),
     )
     .unwrap();
 
@@ -91,6 +97,7 @@ fn copy_creates_the_missing_files_as_empty_arrays() {
         &settings_for(&from),
         &to.path().display().to_string(),
         "copy",
+        &crypto(),
     )
     .unwrap();
 
@@ -113,6 +120,7 @@ fn copy_keeps_the_gpg_name_and_the_0600_mode() {
         &settings_for(&from),
         &to.path().display().to_string(),
         "copy",
+        &crypto(),
     )
     .unwrap();
 
@@ -144,6 +152,7 @@ fn load_returns_that_folder_s_library() {
         &settings_for(&from),
         &to.path().display().to_string(),
         "load",
+        &crypto(),
     )
     .unwrap();
 
@@ -167,6 +176,7 @@ fn load_refuses_a_folder_without_a_library() {
         &settings_for(&from),
         &to.path().display().to_string(),
         "load",
+        &crypto(),
     )
     .unwrap_err();
 
@@ -200,11 +210,11 @@ fn an_unknown_mode_and_an_empty_path_are_rejected() {
     let from = env.config();
     let other = settings_for(&from);
 
-    let err = set_hosts_folder(&other, "/tmp/fsx-target", "move").unwrap_err();
+    let err = set_hosts_folder(&other, "/tmp/fsx-target", "move", &crypto()).unwrap_err();
     assert_eq!(err.code, "bad_request");
     assert!(err.message.contains("move"));
 
-    let err = set_hosts_folder(&other, "   ", "copy").unwrap_err();
+    let err = set_hosts_folder(&other, "   ", "copy", &crypto()).unwrap_err();
     assert_eq!(err.code, "bad_request");
     assert!(err.message.contains("empty"));
 }
@@ -217,8 +227,13 @@ fn copying_onto_the_current_folder_changes_nothing() {
     fs::write(from.join("accounts.json"), "[]").unwrap();
     fs::write(from.join("bookmarks.json"), "[]").unwrap();
 
-    let report =
-        set_hosts_folder(&settings_for(&from), &from.display().to_string(), "copy").unwrap();
+    let report = set_hosts_folder(
+        &settings_for(&from),
+        &from.display().to_string(),
+        "copy",
+        &crypto(),
+    )
+    .unwrap();
 
     assert_eq!(report.hosts.len(), 1);
     assert_eq!(
@@ -236,8 +251,13 @@ fn a_folder_that_cannot_be_created_names_the_path_and_its_permissions() {
     fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o500)).unwrap();
     let to = parent.path().join("library");
 
-    let err =
-        set_hosts_folder(&settings_for(&from), &to.display().to_string(), "copy").unwrap_err();
+    let err = set_hosts_folder(
+        &settings_for(&from),
+        &to.display().to_string(),
+        "copy",
+        &crypto(),
+    )
+    .unwrap_err();
 
     fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o700)).unwrap();
     assert_eq!(err.code, "io");

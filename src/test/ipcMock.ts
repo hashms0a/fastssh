@@ -6,9 +6,15 @@ export interface MockBackend {
   calls: Array<{ cmd: string; args: Record<string, unknown> }>;
   report: LoadReport;
   /** Queued rejections per command (save_hosts etc.), consumed in order. */
-  failures: Record<string, string[]>;
-  /** Make the next call to `cmd` reject with this message. */
-  failNext: (cmd: string, message: string) => void;
+  failures: Record<string, unknown[]>;
+  /**
+   * Make the next call to `cmd` reject. A string, or a Rust `AppError` shape
+   * (`{ code, message }`) when the test needs the code, e.g. wrong_passphrase.
+   */
+  failNext: (cmd: string, error: unknown) => void;
+  /** Override what a command returns for every later call. */
+  answer: (cmd: string, value: unknown) => void;
+  answers: Record<string, unknown>;
 }
 
 export function emptyReport(overrides: Partial<LoadReport> = {}): LoadReport {
@@ -20,6 +26,7 @@ export function emptyReport(overrides: Partial<LoadReport> = {}): LoadReport {
     warnings: [],
     locked: false,
     legacyAvailable: false,
+    legacyHosts: 0,
     ...overrides,
   };
 }
@@ -30,8 +37,12 @@ export function installIpcMock(overrides: Partial<LoadReport> = {}): MockBackend
     calls: [],
     report: emptyReport(overrides),
     failures: {},
-    failNext: (cmd, message) => {
-      (backend.failures[cmd] ??= []).push(message);
+    answers: {},
+    failNext: (cmd, error) => {
+      (backend.failures[cmd] ??= []).push(error);
+    },
+    answer: (cmd, value) => {
+      backend.answers[cmd] = value;
     },
   };
   mockIPC((cmd, args) => {
@@ -39,6 +50,7 @@ export function installIpcMock(overrides: Partial<LoadReport> = {}): MockBackend
     const queued = backend.failures[cmd];
     const message = queued?.shift();
     if (message !== undefined) return Promise.reject(message);
+    if (cmd in backend.answers) return backend.answers[cmd];
     switch (cmd) {
       case "get_runtime_info":
         return {
@@ -56,6 +68,20 @@ export function installIpcMock(overrides: Partial<LoadReport> = {}): MockBackend
           configPath: "/tmp/fastssh-mock/ssh/config",
           backupPath: "/tmp/fastssh-mock/ssh/config.backup",
           hasConfig: true,
+        };
+      // Stage 10: the encrypted library and the EasySSH import.
+      case "crypto_info":
+        return { available: true };
+      case "unlock_library":
+      case "start_empty_library":
+        return backend.report;
+      case "import_easyssh":
+        return {
+          hostsAdded: 5,
+          accountsAdded: 1,
+          bookmarksAdded: 2,
+          skipped: [],
+          warnings: [],
         };
       case "enable_ssh_config_sync":
         return {

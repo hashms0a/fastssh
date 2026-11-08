@@ -8,11 +8,13 @@ interface CheckProps {
   checked: boolean;
   onChange: (value: boolean) => void;
   disabled?: boolean;
+  /** Tooltip when disabled; defaults to "Coming soon". */
+  disabledTitle?: string;
   hint?: string;
 }
 
 /** Checkbox row of the Preferences modal; a disabled one says "Coming soon". */
-export function Check({ testId, label, checked, onChange, disabled, hint }: CheckProps) {
+export function Check({ testId, label, checked, onChange, disabled, disabledTitle, hint }: CheckProps) {
   return (
     <label className="flex items-start gap-2 py-1">
       <input
@@ -20,7 +22,7 @@ export function Check({ testId, label, checked, onChange, disabled, hint }: Chec
         data-testid={testId}
         checked={checked}
         disabled={disabled}
-        title={disabled ? strings.comingSoon : undefined}
+        title={disabled ? (disabledTitle ?? strings.comingSoon) : undefined}
         className="mt-1 accent-[var(--accent)]"
         onChange={(e) => onChange(e.target.checked)}
       />

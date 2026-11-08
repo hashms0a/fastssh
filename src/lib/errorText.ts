@@ -12,3 +12,13 @@ export function errorText(e: unknown): string {
   }
   return String(e);
 }
+
+/** The `code` of a rejected Rust `AppError` ("wrong_passphrase", "locked", …);
+ *  "" when the rejection carries none. */
+export function errorCode(e: unknown): string {
+  if (e && typeof e === "object" && "code" in e) {
+    const c = (e as { code: unknown }).code;
+    if (typeof c === "string") return c;
+  }
+  return "";
+}

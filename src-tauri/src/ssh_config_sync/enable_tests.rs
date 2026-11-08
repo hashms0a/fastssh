@@ -2,6 +2,11 @@
 //! config cannot be written while the library save still succeeds.
 
 use super::*;
+
+fn crypto() -> crate::crypto::LibraryCrypto {
+    crate::crypto::LibraryCrypto::unencrypted()
+}
+
 use crate::ssh_config_sync::test_env::*;
 
 #[test]
@@ -14,7 +19,7 @@ fn enable_backs_up_imports_saves_the_library_and_exports() {
     .unwrap();
     let before = vec![host("keep1", 22), host("keep2", 22)];
 
-    let report = enable(&env.settings(), &before).unwrap();
+    let report = enable(&env.settings(), &before, &crypto()).unwrap();
     assert_eq!(
         report
             .imported
@@ -74,12 +79,12 @@ fn enable_skips_names_that_already_exist_and_reimporting_adds_nothing() {
         "Host web1\n    HostName 127.0.0.1\n",
     )
     .unwrap();
-    let report = enable(&env.settings(), &[host("web1", 2222)]).unwrap();
+    let report = enable(&env.settings(), &[host("web1", 2222)], &crypto()).unwrap();
     assert!(report.imported.is_empty());
     assert_eq!(report.skipped, vec!["web1".to_string()]);
 
     // A second enable on the resulting library imports nothing new.
-    let again = enable(&env.settings(), &report.hosts).unwrap();
+    let again = enable(&env.settings(), &report.hosts, &crypto()).unwrap();
     assert!(again.imported.is_empty());
     assert_eq!(again.skipped, vec!["web1".to_string()]);
 }
@@ -88,7 +93,7 @@ fn enable_skips_names_that_already_exist_and_reimporting_adds_nothing() {
 fn a_save_with_sync_on_rewrites_the_config() {
     let env = Env::new();
     fs::write(env.ssh.path().join("config"), "Host db2\n    Port 22\n").unwrap();
-    save_hosts_and_sync(&env.settings(), &[host("db2", 2200)]).unwrap();
+    save_hosts_and_sync(&env.settings(), &[host("db2", 2200)], &crypto()).unwrap();
     let text = fs::read_to_string(env.ssh.path().join("config")).unwrap();
     assert!(text.contains("    Port 2200"));
     assert!(!text.contains("    Port 22\n"));
@@ -106,7 +111,7 @@ fn a_read_only_config_fails_the_export_but_the_hosts_save_still_succeeds() {
     fs::write(env.ssh.path().join("config"), "Host a\n").unwrap();
     fs::set_permissions(env.ssh.path(), fs::Permissions::from_mode(0o500)).unwrap();
 
-    let result = save_hosts_and_sync(&env.settings(), &[host("a", 22)]);
+    let result = save_hosts_and_sync(&env.settings(), &[host("a", 22)], &crypto());
     let warning = result.expect("the hosts save succeeds").expect("a warning");
     assert!(
         warning.contains(env.ssh.path().display().to_string().as_str()),
@@ -136,7 +141,7 @@ fn with_sync_off_a_save_leaves_the_config_alone() {
         sync_ssh_config: false,
         ..AppSettings::default()
     };
-    let warning = save_hosts_and_sync(&settings, &[host("b", 22)]).unwrap();
+    let warning = save_hosts_and_sync(&settings, &[host("b", 22)], &crypto()).unwrap();
     assert_eq!(warning, None);
     assert_eq!(
         fs::read_to_string(env.ssh.path().join("config")).unwrap(),

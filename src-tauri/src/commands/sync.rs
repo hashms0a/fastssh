@@ -7,6 +7,7 @@
 //! (`updateSettings` + the debounced save), as in Stage 8.
 
 use crate::AppState;
+use crate::commands::crypto_ctx;
 use crate::commands::library::blocking;
 use crate::error::AppError;
 use crate::models::Host;
@@ -27,7 +28,8 @@ pub async fn enable_ssh_config_sync(
     hosts: Vec<Host>,
 ) -> Result<SyncReport, AppError> {
     let settings = state.settings.lock().map_err(lock_err)?.clone();
-    let report = blocking(move || ssh_config_sync::enable(&settings, &hosts)).await?;
+    let crypto = crypto_ctx(&state);
+    let report = blocking(move || ssh_config_sync::enable(&settings, &hosts, &crypto)).await?;
     // Only after a successful export: a failed enable leaves sync off.
     let mut guard = state.settings.lock().map_err(lock_err)?;
     guard.sync_ssh_config = true;

@@ -27,6 +27,8 @@ export interface LoadReport {
   warnings: string[];
   locked: boolean;
   legacyAvailable: boolean;
+  /** Records in the legacy EasySSH hosts.json (task 10.7 button). */
+  legacyHosts: number;
 }
 
 /** Task 8.3: read that folder's library, or write the current one into it. */
@@ -37,6 +39,20 @@ export interface SyncInfo {
   configPath: string;
   backupPath: string;
   hasConfig: boolean;
+}
+
+/** Task 10.3: whether the host `gpg` binary exists (Preferences tooltip). */
+export interface CryptoInfo {
+  available: boolean;
+}
+
+/** Task 10.6/10.7: what the EasySSH import did. */
+export interface ImportReport {
+  hostsAdded: number;
+  accountsAdded: number;
+  bookmarksAdded: number;
+  skipped: string[];
+  warnings: string[];
 }
 
 /** The result of enabling sync; `hosts` is the library including the imports. */
@@ -84,6 +100,15 @@ export const ipc = {
   sshConfigInfo: (): Promise<SyncInfo> => invoke<SyncInfo>("ssh_config_info"),
   enableSshConfigSync: (hosts: Host[]) => invoke<SyncReport>("enable_ssh_config_sync", { hosts }),
   disableSshConfigSync: () => invoke<void>("disable_ssh_config_sync"),
+
+  // Stage 10 (tasks 10.3/10.7): encrypted library + EasySSH import.
+  // The passphrase is sent once and never kept in the frontend store.
+  cryptoInfo: (): Promise<CryptoInfo> => invoke<CryptoInfo>("crypto_info"),
+  unlockLibrary: (passphrase: string) => invoke<LoadReport>("unlock_library", { passphrase }),
+  setEncryption: (enabled: boolean, passphrase: string | null) =>
+    invoke<void>("set_encryption", { enabled, passphrase }),
+  startEmptyLibrary: (): Promise<LoadReport> => invoke<LoadReport>("start_empty_library"),
+  importEasyssh: (): Promise<ImportReport> => invoke<ImportReport>("import_easyssh"),
 
   // Stage 7: openers (R16, R12). Both resolve with the launcher that accepted
   // the URL, and reject with an AppError whose message contains the URL.

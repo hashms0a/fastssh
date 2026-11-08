@@ -3,6 +3,7 @@ import { Bookmark, EllipsisVertical, Plus, TerminalSquare } from "lucide-react";
 import { strings } from "../lib/strings";
 import { quitNow } from "../lib/quitActions";
 import { addHost } from "../lib/editorActions";
+import { importEasysshNow } from "../lib/importActions";
 import { openLocalShell } from "../terminal/sessionController";
 import { useAppStore } from "../store/useAppStore";
 import { ContextMenu } from "./ContextMenu";
@@ -18,6 +19,7 @@ export function HeaderBar() {
   const setFilter = useAppStore((s) => s.setFilter);
   const openPreferences = useAppStore((s) => s.openPreferences);
   const openAbout = useAppStore((s) => s.openAbout);
+  const legacyAvailable = useAppStore((s) => s.legacyAvailable);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [popover, setPopover] = useState<{ x: number; y: number } | null>(null);
 
@@ -104,7 +106,12 @@ export function HeaderBar() {
           onClose={() => setMenu(null)}
           items={[
             { label: strings.preferences, run: openPreferences },
-            { label: strings.importEasyssh, run: () => undefined, disabled: true, title: strings.comingSoon },
+            {
+              label: strings.importEasyssh,
+              run: () => void importEasysshNow(),
+              disabled: !legacyAvailable,
+              title: legacyAvailable ? undefined : strings.noEasysshData,
+            },
             { label: strings.about, run: openAbout },
             { label: strings.quit, run: () => void quitNow() },
           ]}

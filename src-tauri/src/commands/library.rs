@@ -2,6 +2,7 @@
 //! Handlers only parse args, call into storage, and map errors.
 
 use crate::AppState;
+use crate::commands::crypto_ctx;
 use crate::error::AppError;
 use crate::hosts_folder;
 use crate::models::{Account, Bookmark, Host};
@@ -20,8 +21,11 @@ pub(crate) async fn blocking<T: Send + 'static>(
 }
 
 #[tauri::command]
-pub async fn load_all() -> Result<LoadReport, AppError> {
-    blocking(|| Ok(storage::load_all())).await
+pub async fn load_all(state: State<'_, AppState>) -> Result<LoadReport, AppError> {
+    // A fresh process holds no passphrase, so an encrypted library comes back
+    // as `locked: true` and the UI shows the unlock modal (task 10.2).
+    let crypto = crypto_ctx(&state);
+    blocking(move || storage::load_all(&crypto)).await
 }
 
 /// Task 9.6: with Sync SSH config on, every host save also rebuilds
@@ -33,7 +37,8 @@ pub async fn save_hosts(
     hosts: Vec<Host>,
 ) -> Result<Option<String>, AppError> {
     let settings = state.settings.lock().map_err(lock_err)?.clone();
-    blocking(move || ssh_config_sync::save_hosts_and_sync(&settings, &hosts)).await
+    let crypto = crypto_ctx(&state);
+    blocking(move || ssh_config_sync::save_hosts_and_sync(&settings, &hosts, &crypto)).await
 }
 
 #[tauri::command]
@@ -42,7 +47,8 @@ pub async fn save_accounts(
     accounts: Vec<Account>,
 ) -> Result<(), AppError> {
     let settings = state.settings.lock().map_err(lock_err)?.clone();
-    blocking(move || storage::save_accounts(&settings, &accounts)).await
+    let crypto = crypto_ctx(&state);
+    blocking(move || storage::save_accounts(&settings, &accounts, &crypto)).await
 }
 
 #[tauri::command]
@@ -51,7 +57,8 @@ pub async fn save_bookmarks(
     bookmarks: Vec<Bookmark>,
 ) -> Result<(), AppError> {
     let settings = state.settings.lock().map_err(lock_err)?.clone();
-    blocking(move || storage::save_bookmarks(&settings, &bookmarks)).await
+    let crypto = crypto_ctx(&state);
+    blocking(move || storage::save_bookmarks(&settings, &bookmarks, &crypto)).await
 }
 
 #[tauri::command]
@@ -88,7 +95,9 @@ pub async fn set_hosts_folder(
     mode: String,
 ) -> Result<LoadReport, AppError> {
     let current = state.settings.lock().map_err(lock_err)?.clone();
-    let report = blocking(move || hosts_folder::set_hosts_folder(&current, &path, &mode)).await?;
+    let crypto = crypto_ctx(&state);
+    let report =
+        blocking(move || hosts_folder::set_hosts_folder(&current, &path, &mode, &crypto)).await?;
     *state.settings.lock().map_err(lock_err)? = report.settings.clone();
     Ok(report)
 }

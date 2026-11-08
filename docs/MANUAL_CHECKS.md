@@ -79,3 +79,27 @@ everything that can be asserted lives in a vitest unit test or an e2e spec.
       open cancels it without removing the bookmark.
 - [ ] Audible bell (Stage 6 item, still open): loudness and the 200 ms throttle
       feel right on real hardware.
+
+
+## Stage 10 - GPG encryption, unlock, EasySSH import
+
+- [ ] Type a real passphrase on real hardware: enable Encrypt, quit FastSSH,
+      start it again and unlock. The typed characters must match what the field
+      shows (masked), and a wrong passphrase must keep what you typed so you can
+      fix a typo. The e2e spec drives this with the sandbox passphrase
+      `test-passphrase-1`; only a person can judge the typing feel and whether
+      the modal steals focus at startup.
+- [ ] On a machine **without** gnupg installed, the Encrypt switch must be
+      greyed out with the tooltip "Install gnupg to enable encryption". Here gpg
+      2.4.8 is present, so the spec cannot prove the missing-binary path.
+- [ ] Start FastSSH on a machine that has `~/.config/easyssh` data written by
+      the real EasySSH app, click "Import from EasySSH" and check the counts
+      match what EasySSH shows. The sandbox fixture is a hand-written copy of
+      the legacy shape.
+- [ ] After enabling encryption, close the laptop lid / suspend for a while and
+      unlock: the passphrase stays in memory, so FastSSH should still save
+      without asking. If you want it to re-ask after idle, that is a decision -
+      see HANDOFF_STAGE_10 §12.1.
+- [ ] On the 22.04 AppImage (Stage 12), confirm `gpg` is found on `PATH` inside
+      the AppImage environment; encryption without a system gpg needs a bundled
+      binary, which Stage 10 does not do.

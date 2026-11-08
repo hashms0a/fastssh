@@ -4,17 +4,14 @@
 //! frontend can show the result; the settings write stays in the frontend
 //! (`updateSettings` + the debounced save), which keeps one writer.
 
+use crate::crypto::LibraryCrypto;
 use crate::error::AppError;
 use crate::paths;
 use crate::settings::AppSettings;
-use crate::storage::{self, LoadReport};
+use crate::storage::{self, LIBRARY_FILES, LoadReport};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-
-/// The files that make up the library; each may also exist as `<name>.gpg`
-/// once Stage 10 lands.
-pub const LIBRARY_FILES: [&str; 3] = ["hosts.json", "accounts.json", "bookmarks.json"];
 
 pub enum FolderMode {
     Load,
@@ -103,6 +100,7 @@ pub fn set_hosts_folder(
     current: &AppSettings,
     folder: &str,
     mode: &str,
+    crypto: &LibraryCrypto,
 ) -> Result<LoadReport, AppError> {
     let mode = parse_mode(mode)?;
     let folder = folder.trim();
@@ -142,7 +140,7 @@ pub fn set_hosts_folder(
             log::info!("set_hosts_folder mode=load from={}", to.display());
         }
     }
-    Ok(storage::report_from(&to, settings))
+    storage::report_from(&to, settings, crypto)
 }
 
 #[cfg(test)]

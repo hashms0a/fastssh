@@ -1,4 +1,9 @@
 use super::*;
+
+fn crypto() -> crate::crypto::LibraryCrypto {
+    crate::crypto::LibraryCrypto::unencrypted()
+}
+
 use serde_json::json;
 
 fn tmp() -> tempfile::TempDir {
@@ -157,7 +162,7 @@ fn save_hosts_drops_the_local_host() {
         name: "web1".into(),
         ..Host::default()
     };
-    save_hosts(&s, &[web.clone(), local]).unwrap();
+    save_hosts(&s, &[web.clone(), local], &crypto()).unwrap();
     let mut w = vec![];
     let arr = read_array(&d.path().join("hosts.json"), &mut w);
     assert_eq!(arr.len(), 1);
@@ -182,7 +187,7 @@ fn load_normalizes_existing_file_modes_to_0600() {
         fs::Permissions::from_mode(0o664),
     )
     .unwrap();
-    let report = load_all();
+    let report = load_all(&crypto()).unwrap();
     assert!(report.warnings.is_empty());
     for name in ["hosts.json", "settings.json"] {
         let mode = fs::metadata(d.path().join(name))

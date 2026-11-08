@@ -13,15 +13,20 @@ export function Toasts() {
   const warnings = useAppStore((s) => s.warnings);
   const dismissToast = useAppStore((s) => s.dismissToast);
   const dismissWarnings = useAppStore((s) => s.dismissWarnings);
+  const locked = useAppStore((s) => s.locked);
 
-  if (toasts.length === 0 && warnings.length === 0) return null;
+  // While the unlock modal is up, it explains the encrypted files. Stacking
+  // the load warnings behind it (Stage 10) only hides the app.
+  const shown = locked ? [] : warnings;
+
+  if (toasts.length === 0 && shown.length === 0) return null;
 
   return (
     <div
       data-testid="toasts"
       className="pointer-events-none fixed bottom-4 right-4 z-50 flex max-w-md flex-col items-end gap-2"
     >
-      {warnings.map((w) => (
+      {shown.map((w) => (
         <div
           key={`w:${w}`}
           data-testid="warning-line"
