@@ -8,6 +8,9 @@ EasySSH 1.7.x. Built with Tauri 2 (Rust) + React + xterm.js.
 FastSSH runs `ssh` in a pseudo-terminal; it does not implement SSH itself. Your
 host keys, agent, and `~/.ssh/config` behaviour stay yours.
 
+<img width="1100" height="640" alt="header-menu" src="https://github.com/user-attachments/assets/574feefe-ae14-441f-ade7-d6e453ca534a" />
+
+
 ## Install
 
 Download [`FastSSH_1.0.0_amd64.AppImage`](https://github.com/hashms0a/fastssh/releases/tag/v1.0.0) and make it executable:
