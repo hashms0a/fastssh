@@ -10,7 +10,7 @@ host keys, agent, and `~/.ssh/config` behaviour stay yours.
 
 ## Install
 
-Download `FastSSH_1.0.0_amd64.AppImage` and make it executable:
+Download [`FastSSH_1.0.0_amd64.AppImage`](https://github.com/hashms0a/fastssh/releases/tag/v1.0.0) and make it executable:
 
 ```bash
 chmod +x FastSSH_1.0.0_amd64.AppImage
