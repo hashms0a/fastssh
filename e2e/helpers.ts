@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { execSync } from "node:child_process";
 
 const T = process.env.FASTSSH_TESTENV ?? path.join(os.homedir(), "fastssh-testenv");
 /** The sandbox config dir the app under test uses (helpers.ts sets the env). */
@@ -35,10 +36,34 @@ export function resetSandbox(set: FixtureSet = "legacy"): void {
     if (fs.existsSync(src)) fs.copyFileSync(src, path.join(configDir, path.basename(rel)));
   }
   if (set === "sshconfig") {
-    const src = path.join(T, "ssh", "config");
-    if (fs.existsSync(src)) fs.copyFileSync(src, path.join(configDir, "ssh_config"));
+    // Stage 9 rewrites the sandbox ssh config, so rebuild the fixtures: the
+    // config goes back to the pristine file (and the backups of past runs go).
+    execSync(`bash ${path.join(__dirname, "..", "tools", "make_fixtures.sh")}`, { stdio: "ignore" });
+    for (const f of fs.readdirSync(sshDir)) {
+      if (f.startsWith("config.backup")) fs.rmSync(path.join(sshDir, f), { force: true });
+    }
   }
 }
+
+/** The sandbox ssh config - the file Stage 9 owns. */
+export const sshConfigPath = path.join(sshDir, "config");
+
+export function readSshConfig(): string {
+  return fs.existsSync(sshConfigPath) ? fs.readFileSync(sshConfigPath, "utf8") : "";
+}
+
+/** What ssh itself reads for one host, through the sandbox config. */
+export function sshConfigDump(name: string): string {
+  return execSync(`ssh -F '${sshConfigPath}' -G ${JSON.stringify(name)}`, { encoding: "utf8" });
+}
+
+/** The host rows inside one sidebar group. */
+export const rowsInGroup = async (group: string): Promise<string[]> =>
+  (await browser.execute((g) => {
+    const box = document.querySelector(`[data-testid="group-${g}"]`);
+    if (!box) return [];
+    return [...box.querySelectorAll('[data-testid="host-row"]')].map((e) => e.getAttribute("data-name") ?? "");
+  }, group)) as string[];
 
 /** Fresh sandbox data, then restart the app so it loads it. */
 export async function loadFixture(set: FixtureSet = "legacy"): Promise<void> {

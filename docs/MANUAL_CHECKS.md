@@ -3,6 +3,36 @@
 Each stage adds its items here. The agent never clicks through the UI by hand;
 everything that can be asserted lives in a vitest unit test or an e2e spec.
 
+## Stage 9 — two-way ~/.ssh/config sync
+
+- [ ] **Enable Sync against your real `~/.ssh/config`.** Every automated test
+      runs against the sandbox (`FASTSSH_SSH_DIR`), because writing the owner's
+      real config needs explicit approval. On your own machine: turn the
+      switch on in Preferences, read the confirm dialog (it names the file and
+      the backup path), and accept. Then check that `~/.ssh/config` still has
+      your global lines before the managed section, that your wildcard, `Match`
+      and `Include` blocks are still there after it, and that `ssh <name>` for
+      one of your hosts still connects. Delete that host in FastSSH and check
+      its block disappears while everything else survives.
+      **Your original file is copied to `config.backup` first, and a second
+      enable writes `config.backup.<timestamp>` instead of overwriting it.**
+- [ ] A `~/.ssh/config` that is a symlink (dotfiles repository): enabling sync
+      and saving a host must leave the symlink intact and edit the file it
+      points to. Unit-tested with a temp symlink; confirm with your real setup.
+- [ ] Hosts that live inside an `Include` file are **not** imported (recorded
+      limitation, plan Stage 9 note). Check that they still connect through the
+      preserved `Include` line, and that FastSSH does not write a duplicate
+      block for them.
+- [ ] Sync mode against a real server with a zsh or fish prompt: the auto-login
+      detection and the logout-close rule (R11) depend on the prompt shape;
+      Localhost and the container only prove bash.
+- [ ] A read-only `~/.ssh/config` (or a read-only `~/.ssh`): saving a host must
+      still update the library and show a toast naming the file and the OS
+      error, instead of failing the save. Unit-tested; confirm the toast reads
+      well.
+- [ ] Turning Sync back off: FastSSH stops rewriting the file, and the managed
+      section you already have stays editable by hand.
+
 ## Stage 8 — preferences, session restore, quit flow
 
 - [ ] **Browse for the hosts folder.** The native directory dialog cannot be

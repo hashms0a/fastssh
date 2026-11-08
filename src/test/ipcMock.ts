@@ -50,6 +50,20 @@ export function installIpcMock(overrides: Partial<LoadReport> = {}): MockBackend
         };
       case "load_all":
         return backend.report;
+      // Stage 9: the sync flow asks what it would do, then enables/disables.
+      case "ssh_config_info":
+        return {
+          configPath: "/tmp/fastssh-mock/ssh/config",
+          backupPath: "/tmp/fastssh-mock/ssh/config.backup",
+          hasConfig: true,
+        };
+      case "enable_ssh_config_sync":
+        return {
+          backupPath: "/tmp/fastssh-mock/ssh/config.backup",
+          imported: [],
+          skipped: [],
+          hosts: (args as { hosts?: unknown } | undefined)?.hosts ?? [],
+        };
       default:
         return null;
     }

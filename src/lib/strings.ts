@@ -140,7 +140,16 @@ export const strings = {
   hostsFolderHint: "The folder holding hosts.json, accounts.json and bookmarks.json.",
   restoreOnStartup: "Restore hosts on startup",
   syncSshConfig: "Sync SSH config",
-  syncSoonHint: "Stage 9: two-way sync with ~/.ssh/config.",
+  syncHint: "Writes the library's Host entries to the SSH config file.",
+  syncConfirmTitle: "Sync SSH config",
+  syncConfirmMessage: (configPath: string, backupPath: string, hasConfig: boolean) =>
+    `FastSSH will manage Host entries in ${configPath}. ` +
+    (hasConfig
+      ? `A backup will be saved to ${backupPath}. `
+      : "There is no config file yet, so nothing is backed up. ") +
+    "Wildcard and Match blocks are kept.",
+  syncImported: (n: number, m: number) => `Imported ${n} host${n === 1 ? "" : "s"} (${m} skipped)`,
+  syncStopped: "SSH config sync is off. The file keeps what FastSSH wrote.",
   encryptData: "Encrypt data",
   encryptSoonHint: "Stage 10: GPG-encrypted library files.",
   darkTheme: "Dark theme",

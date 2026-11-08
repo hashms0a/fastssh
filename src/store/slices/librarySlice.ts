@@ -28,13 +28,16 @@ export interface LibrarySlice {
  * Save token per collection (plan 3.12): two saves in flight must not have
  * the older failure restore its snapshot over the newer state.
  */
-function makeSaver<K extends "hosts" | "accounts" | "bookmarks">(key: K, save: (v: AppStore[K]) => Promise<void>) {
+function makeSaver<K extends "hosts" | "accounts" | "bookmarks">(
+  key: K,
+  save: (v: AppStore[K], get: () => AppStore) => Promise<void>,
+) {
   let token = 0;
   return (set: (p: Partial<AppStore>) => void, get: () => AppStore, next: AppStore[K]) => {
     const previous = get()[key];
     const my = ++token;
     set({ [key]: next } as unknown as Partial<AppStore>);
-    return save(next)
+    return save(next, get)
       .then(() => true)
       .catch((e) => {
         if (my === token) set({ [key]: previous } as unknown as Partial<AppStore>);
@@ -48,9 +51,17 @@ function makeSaver<K extends "hosts" | "accounts" | "bookmarks">(key: K, save: (
 /** Library saves are NOT debounced (plan Stage 1 notes): each explicit
  *  save is one write; settings changes on every resize and use 400 ms. */
 export const createLibrarySlice: StateCreator<AppStore, [], [], LibrarySlice> = (set, get) => {
-  const saveHosts = makeSaver("hosts", ipc.saveHosts);
-  const saveAccounts = makeSaver("accounts", ipc.saveAccounts);
-  const saveBookmarks = makeSaver("bookmarks", ipc.saveBookmarks);
+  // Task 9.6: a failed ~/.ssh/config export is a warning, not a failed save.
+  const saveHosts = makeSaver("hosts", async (hosts, get) => {
+    const warning = await ipc.saveHosts(hosts);
+    if (warning) get().pushToast(warning, "error");
+  });
+  const saveAccounts = makeSaver("accounts", async (accounts) => {
+    await ipc.saveAccounts(accounts);
+  });
+  const saveBookmarks = makeSaver("bookmarks", async (bookmarks) => {
+    await ipc.saveBookmarks(bookmarks);
+  });
   return {
     hosts: [],
     accounts: [],

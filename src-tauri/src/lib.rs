@@ -8,6 +8,8 @@ pub mod paths;
 pub mod pty_manager;
 pub mod settings;
 pub mod ssh_command;
+pub mod ssh_config;
+pub mod ssh_config_sync;
 pub mod storage;
 pub mod utf8_chunker;
 
@@ -77,6 +79,9 @@ pub fn run() {
             commands::session::write_pty,
             commands::session::resize_pty,
             commands::session::kill_session,
+            commands::sync::ssh_config_info,
+            commands::sync::enable_ssh_config_sync,
+            commands::sync::disable_ssh_config_sync,
         ])
         .build(tauri::generate_context!())
         .expect("error while building FastSSH")

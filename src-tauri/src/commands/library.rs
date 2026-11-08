@@ -6,11 +6,12 @@ use crate::error::AppError;
 use crate::hosts_folder;
 use crate::models::{Account, Bookmark, Host};
 use crate::settings::AppSettings;
+use crate::ssh_config_sync;
 use crate::storage::{self, LoadReport};
 use tauri::State;
 
 /// Run blocking file I/O off the IPC thread.
-async fn blocking<T: Send + 'static>(
+pub(crate) async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> Result<T, AppError> + Send + 'static,
 ) -> Result<T, AppError> {
     tokio::task::spawn_blocking(f)
@@ -23,10 +24,16 @@ pub async fn load_all() -> Result<LoadReport, AppError> {
     blocking(|| Ok(storage::load_all())).await
 }
 
+/// Task 9.6: with Sync SSH config on, every host save also rebuilds
+/// ~/.ssh/config. An export failure does not cancel the save; the warning comes
+/// back as `Some(message)` so the UI can toast it.
 #[tauri::command]
-pub async fn save_hosts(state: State<'_, AppState>, hosts: Vec<Host>) -> Result<(), AppError> {
+pub async fn save_hosts(
+    state: State<'_, AppState>,
+    hosts: Vec<Host>,
+) -> Result<Option<String>, AppError> {
     let settings = state.settings.lock().map_err(lock_err)?.clone();
-    blocking(move || storage::save_hosts(&settings, &hosts)).await
+    blocking(move || ssh_config_sync::save_hosts_and_sync(&settings, &hosts)).await
 }
 
 #[tauri::command]

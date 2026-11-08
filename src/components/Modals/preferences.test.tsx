@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { PreferencesModal } from "./PreferencesModal";
+import { ModalHost } from "./ModalHost";
 import { useAppStore } from "../../store/useAppStore";
 import { DEFAULT_SETTINGS } from "../../types/models";
 import { emptyReport, installIpcMock } from "../../test/ipcMock";
@@ -87,13 +88,59 @@ describe("Preferences modal (task 8.1)", () => {
     expect(useAppStore.getState().settings.scrollbackLines).toBe(100000);
   });
 
-  it("General: Restore toggles, and Sync/Encrypt are disabled for now", () => {
+  it("General: Restore toggles, Encrypt is still disabled", () => {
     const spy = watchUpdates();
     render(<PreferencesModal />);
     fireEvent.click(screen.getByTestId("prefs-restore-hosts"));
     expect(spy).toHaveBeenCalledWith({ restoreHosts: true });
-    expect((screen.getByTestId("prefs-sync-config") as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByTestId("prefs-encrypt") as HTMLInputElement).disabled).toBe(true);
+  });
+
+  // Stage 9 un-disabled "Sync SSH config": it asks before rewriting the file.
+  it("Sync asks for confirmation, then enables; Cancel enables nothing", async () => {
+    const spy = watchUpdates();
+    render(
+      <>
+        <PreferencesModal />
+        <ModalHost />
+      </>,
+    );
+    fireEvent.click(screen.getByTestId("prefs-sync-config"));
+    const message = await screen.findByTestId("confirm-message");
+    expect(message.textContent).toContain("/tmp/fastssh-mock/ssh/config");
+    expect(message.textContent).toContain("config.backup");
+    expect(message.textContent).toMatch(/Wildcard and Match blocks are kept/);
+
+    fireEvent.click(screen.getByTestId("confirm-cancel"));
+    await waitFor(() => expect(screen.queryByTestId("confirm-dialog")).toBeNull());
+    expect(spy).not.toHaveBeenCalledWith({ syncSshConfig: true });
+    expect((screen.getByTestId("prefs-sync-config") as HTMLInputElement).checked).toBe(false);
+
+    fireEvent.click(screen.getByTestId("prefs-sync-config"));
+    await screen.findByTestId("confirm-message");
+    fireEvent.click(screen.getByTestId("confirm-ok"));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ syncSshConfig: true }));
+    expect((screen.getByTestId("prefs-sync-config") as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("a failed enable leaves the switch off and toasts the error", async () => {
+    const spy = watchUpdates();
+    const backend = installIpcMock();
+    backend.failNext("enable_ssh_config_sync", "ssh/config: Permission denied (os error 13)");
+    render(
+      <>
+        <PreferencesModal />
+        <ModalHost />
+      </>,
+    );
+    fireEvent.click(screen.getByTestId("prefs-sync-config"));
+    await screen.findByTestId("confirm-message");
+    fireEvent.click(screen.getByTestId("confirm-ok"));
+    await waitFor(() => expect(useAppStore.getState().toasts.length).toBeGreaterThan(0));
+    expect(useAppStore.getState().toasts[0]?.message).toContain("Permission denied");
+    expect(useAppStore.getState().toasts[0]?.kind).toBe("error");
+    expect(spy).not.toHaveBeenCalledWith({ syncSshConfig: true });
+    expect((screen.getByTestId("prefs-sync-config") as HTMLInputElement).checked).toBe(false);
   });
 
   it("Close closes the modal, and there is no OK/Apply button", () => {

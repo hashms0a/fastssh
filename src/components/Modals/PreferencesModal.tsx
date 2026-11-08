@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { strings } from "../../lib/strings";
 import { ipc } from "../../lib/ipc";
 import { changeHostsFolder } from "../../lib/hostsFolder";
+import { useSyncToggle } from "../../hooks/useSyncToggle";
 import { toHex } from "../../lib/colors";
 import {
   MAX_FONT_SIZE,
@@ -35,6 +36,7 @@ export function PreferencesModal() {
   const pushToast = useAppStore((s) => s.pushToast);
   const { box, onKeyDown } = useDialogFocus<HTMLDivElement>();
   const [tab, setTab] = useState<"general" | "appearance">("general");
+  const sync = useSyncToggle();
   // The folder field is the one owned by the modal: Browse fills it before
   // the confirm dialog decides whether the path is real.
   const [folder, setFolder] = useState(settings.hostsFolder);
@@ -184,12 +186,12 @@ export function PreferencesModal() {
                 onChange={(v) => updateSettings({ restoreHosts: v })}
               />
               <Check
+                key={`sync-${sync.tick}`}
                 testId="prefs-sync-config"
                 label={strings.syncSshConfig}
-                hint={strings.syncSoonHint}
+                hint={strings.syncHint}
                 checked={settings.syncSshConfig}
-                disabled
-                onChange={() => undefined}
+                onChange={(v) => void sync.run(v)}
               />
               <Check
                 testId="prefs-encrypt"

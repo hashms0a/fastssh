@@ -1,0 +1,25 @@
+# global options before any Host (preamble, must be preserved)
+ServerAliveInterval 30
+
+Host web1 web-alias
+    HostName 127.0.0.1
+    Port 2222
+    User keyuser
+    IdentityFile ~/fastssh-testenv/ssh/id_test
+
+Host db10
+  HostName=10.0.0.10
+  User=postgres
+Host db2
+	HostName 10.0.0.2
+	IdentityFile "~/fastssh-testenv/ssh/key dir/id_space"
+Host bastion
+    HostName bastion.example.invalid
+    ProxyJump web1
+Host !negated *.corp
+    User nobody
+Match host *.internal
+    User matched
+Include conf.d/*
+Host *
+    ServerAliveCountMax 3

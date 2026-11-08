@@ -347,6 +347,8 @@ Check on a real device (`[human]`, all in `docs/MANUAL_CHECKS.md`)
 - Which license does FastSSH ship with? The About dialog says "MIT License"
   because that is what the plan's spirit implies for this project, but there is
   no `LICENSE` file yet; Stage 12 needs the answer.
+  - MIT License.
 - Should a Quit with a failing settings write show a confirm dialog ("your
   changes may not be saved") before quitting, or is the toast enough? Stage 8
   chose toast + quit so a read-only config dir cannot trap the window.
+  - See what is the best option.

@@ -32,6 +32,21 @@ export interface LoadReport {
 /** Task 8.3: read that folder's library, or write the current one into it. */
 export type FolderMode = "load" | "copy";
 
+/** Task 9.7: what enabling sync would do (Rust ssh_config_sync::SyncInfo). */
+export interface SyncInfo {
+  configPath: string;
+  backupPath: string;
+  hasConfig: boolean;
+}
+
+/** The result of enabling sync; `hosts` is the library including the imports. */
+export interface SyncReport {
+  backupPath: string | null;
+  imported: Host[];
+  skipped: string[];
+  hosts: Host[];
+}
+
 /** Typed wrappers over Tauri commands, one per command. */
 export const ipc = {
   getRuntimeInfo: async (): Promise<RuntimeInfo> => {
@@ -47,7 +62,9 @@ export const ipc = {
 
   loadAll: (): Promise<LoadReport> => invoke<LoadReport>("load_all"),
   quit: () => invoke<void>("quit_app"),
-  saveHosts: (hosts: Host[]) => invoke<void>("save_hosts", { hosts }),
+  /** Task 9.6: with sync on, a failed ~/.ssh/config export comes back as a
+   *  warning string (the hosts save itself succeeded); null means "no warning". */
+  saveHosts: (hosts: Host[]) => invoke<string | null>("save_hosts", { hosts }),
   saveAccounts: (accounts: Account[]) => invoke<void>("save_accounts", { accounts }),
   saveBookmarks: (bookmarks: Bookmark[]) => invoke<void>("save_bookmarks", { bookmarks }),
   saveSettings: (settings: AppSettings) => invoke<void>("save_settings", { settings }),
@@ -62,6 +79,11 @@ export const ipc = {
   writePty: (sessionId: string, data: string) => invoke<void>("write_pty", { sessionId, data }),
   resizePty: (sessionId: string, cols: number, rows: number) => invoke<void>("resize_pty", { sessionId, cols, rows }),
   killSession: (sessionId: string) => invoke<void>("kill_session", { sessionId }),
+
+  // Stage 9 (task 9.6/9.7): two-way ~/.ssh/config sync.
+  sshConfigInfo: (): Promise<SyncInfo> => invoke<SyncInfo>("ssh_config_info"),
+  enableSshConfigSync: (hosts: Host[]) => invoke<SyncReport>("enable_ssh_config_sync", { hosts }),
+  disableSshConfigSync: () => invoke<void>("disable_ssh_config_sync"),
 
   // Stage 7: openers (R16, R12). Both resolve with the launcher that accepted
   // the URL, and reject with an AppError whose message contains the URL.

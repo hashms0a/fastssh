@@ -22,7 +22,7 @@ export function ModalHost() {
   const dialog = confirm ? undefined : dialogs[0];
   if (!confirm && !dialog) return null;
   return (
-    <div data-testid="modal-host" className="absolute inset-0 z-40 flex items-center justify-center bg-black/30 p-4">
+    <div data-testid="modal-host" className="absolute inset-0 z-[60] flex items-center justify-center bg-black/30 p-4">
       {confirm ? <ConfirmDialog request={confirm} /> : dialogNode(dialog!)}
     </div>
   );
