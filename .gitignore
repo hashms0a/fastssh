@@ -32,3 +32,8 @@ e2e/.tmp/
 docs/screenshots/**/tmp_*
 dist-release/
 src-tauri/target-jammy/
+# The owner's icon drop directory (the artwork lives in src-tauri/icons/source/).
+/icons/
+# `tauri icon` also writes Android/iOS assets; FastSSH ships Linux only.
+src-tauri/icons/android/
+src-tauri/icons/ios/

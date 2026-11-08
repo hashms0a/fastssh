@@ -7,7 +7,7 @@
 - Task 12.3: `e2e/specs/window.e2e.ts` — 5 cases: minimum size 800×500, maximize/un-maximize, fullscreen and back, long tab title ellipsized, keyboard splitter clamped. Sidebar, tab bar and the document never overflow. Second monitor and the X11 session are `[human]` items.
 - Task 12.4: `e2e/specs/perf.e2e.ts` — 3 cases: PTY output repaints the streaming tab only (sidebar and the other host's row stay at 0 renders, `src/lib/renderLog.ts`), a 68 MB `cat` over ssh does not block the header menu (< 6 s), closing 20 tabs leaves zero live xterm instances and RSS below the peak.
 - Task 12.5: `e2e/specs/a11y.e2e.ts` — 7 cases: no icon-only control without a name, sidebar is a listbox with arrow-key selection and Enter-to-connect, Preferences traps Tab and restores focus, the editor is a dialog, a visible focus ring exists in the stylesheet, an unread tab names its dot. `src/themeContrast.test.ts` checks both palettes against 4.5:1.
-- Task 12.6: `src-tauri/icons/source/fastssh.svg` (original terminal-prompt glyph) rendered to 1024 px and `npm run tauri icon`; the desktop entry now has the name, comment and categories the plan asks for.
+- Task 12.6: the icon is the owner's artwork (`icons/fastssh-icon.png`, copied to `src-tauri/icons/source/fastssh-icon.png`, resized to 1024 px) and `npm run tauri icon` regenerated every size; the desktop entry now has the name, comment and categories the plan asks for.
 - Task 12.7: `npm run build` then `grep -r "__fastsshTest" dist/` → nothing, and the shipped AppImage embeds no hook either (`grep -c __fastsshTest usr/bin/fastssh` → 0).
 - Task 12.8: full list in §9.
 - Task 12.9: `tools/build-appimage-jammy.sh` builds in `ubuntu:22.04` with a separate `src-tauri/target-jammy`, re-packs the AppDir with the linuxdeploy the build already downloaded so the desktop entry is correct, and copies to `dist-release/FastSSH_1.0.0_amd64.AppImage` (78 MB). `objdump -T` → `GLIBC_2.34`.
@@ -45,10 +45,11 @@ keep the status in HANDOFF_STAGE_11 §3, and R1-R22 are all Done.
 New:
 
 - `e2e/specs/edge.e2e.ts` (15), `e2e/specs/window.e2e.ts` (5), `e2e/specs/perf.e2e.ts` (3), `e2e/specs/a11y.e2e.ts` (7) (created)
+- `docs/BUILD_PLAN.txt` - the line stating the sudo password deleted (modified), and scrubbed from every commit, see §8
 - `src/lib/renderLog.ts` - render counters behind the test hook, compiled out of a release build (created)
 - `src/lib/sidebarKeys.ts` + `.test.ts` - the arrow-key/Enter selection model (created)
 - `src/terminal/promptActions.ts` + `.test.ts`, `src/themeContrast.test.ts` (created)
-- `src-tauri/icons/source/fastssh.svg` and the regenerated `src-tauri/icons/*` (created)
+- the regenerated `src-tauri/icons/*` from the owner's artwork (created; the Stage 12 `fastssh.svg` source is deleted)
 - `tools/appimage-jammy/Dockerfile`, `tools/build-appimage-jammy.sh` (created)
 - `tools/e2e-appimage.sh`, `tools/e2e-appimage-run.sh` (created; the driver cannot attach through an AppImage, see §8)
 - `docs/screenshots/stage_12/*.png` (created)
@@ -139,6 +140,11 @@ provider=external ... Cannot read properties of undefined (reading 'bind')`.
 - **eslint/prettier had to ignore the new build output** (`dist-release`,
   `src-tauri/target-jammy`); otherwise `npm run lint` tried to parse the packed
   JS inside the AppImage assets.
+- **`docs/BUILD_PLAN.txt` stated the machine's sudo password** (one line in the
+  Stage 00 stage-instruction block). The owner deleted it from the file, and it
+  is also scrubbed out of every commit with `git filter-branch`, so the hashes
+  of all 13 commits changed. Nothing was ever pushed, and the old objects were
+  pruned (`reflog expire --expire=now --all` + `gc --prune=now`).
 
 ## 9. Verification
 
@@ -152,10 +158,10 @@ provider=external ... Cannot read properties of undefined (reading 'bind')`.
 | cargo test                       | 143 passed                                               |
 | real-files guard                 | OK (nothing under `~/.ssh`, `~/.config/easyssh` changed) |
 | debug build + 8 s sandbox smoke  | OK                                                       |
-| e2e, 22 specs                    | 119 tests, 0 failing                                     |
+| e2e, 21 specs                    | 118 tests, 0 failing                                     |
 
 Per spec: a11y 7, backup 7, bookmarks 4, edge 15, gpg 4, library 11, perf 3,
-persistence 3, preferences 6, probe 1, restore-local 3, shell 9, smoke 1,
+persistence 3, preferences 6, restore-local 3, shell 9, smoke 1,
 ssh 10, sshconfig 3, states 3, tabs 5, terminal 7, tools-menu 2, tools 9,
 warnings 1, window 5.
 
@@ -189,8 +195,8 @@ shows `FastSSH 1.0.0 - GNOME/wayland - DMABUF disabled: yes`.
 - The in-AppImage UI pass (ssh/gpg/xdg-open/env inside it) is a `[human]` item,
   because of the driver limitation above. Everything that can be checked
   without a driver is checked.
-- `probe.e2e.ts` is a Stage 3 scratch spec (1 test). It still passes; delete it
-  if a later pass ever touches the suite layout.
+- `e2e/specs/probe.e2e.ts` (the Stage 3 scratch spec) is deleted: the suite is
+  21 specs / 118 tests.
 - The container build reuses `~/.cache/fastssh-jammy`; delete that directory to
   force a fresh `npm ci`.
 - The AppImage is not signed (12.11) and there is no auto-updater.
@@ -202,16 +208,13 @@ shows `FastSSH 1.0.0 - GNOME/wayland - DMABUF disabled: yes`.
 There is no next stage in the plan: FastSSH is at 1.0.0 with all 12 stages done.
 Remaining human actions:
 
-1. `git tag v1.0.0` — the plan says ask the owner first (not tagged yet).
-2. Publish `dist-release/FastSSH_1.0.0_amd64.AppImage`.
-3. Work through `docs/MANUAL_CHECKS.md` (Stages 7-12 items), especially the
+1. Publish `dist-release/FastSSH_1.0.0_amd64.AppImage`.
+2. Work through `docs/MANUAL_CHECKS.md` (Stages 7-12 items), especially the
    in-AppImage click-through and the real `~/.ssh/config` sync.
 
 ## 12. Open questions for the human
 
-- Tag `v1.0.0` now? (`git tag -a v1.0.0 -m "1.0.0"`)
 - Publish the AppImage anywhere (GitHub release, AppImageHub)? Nothing is pushed
   by this project today.
 - Signing: still declined? `appimagetool --sign` would need a GPG key and a
   public key users import; the README documents the consequence of rotating it.
-- Should `probe.e2e.ts` be deleted, or kept as a smoke fixture?
