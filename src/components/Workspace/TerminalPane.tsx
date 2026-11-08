@@ -61,12 +61,12 @@ export function TerminalPane({ tabId, visible }: Props) {
     { label: strings.search, run: () => openSearch(tabId) },
     { label: strings.copyLastOutput, run: () => copyLastOutput(tabId) },
     { label: strings.scrollLastCommand, run: () => scrollLastCommand(tabId) },
-    // R16 opens sftp:// — wired with the file browser in Stage 7.
+    // R16: remote hosts only; Localhost has no address to open.
     {
       label: strings.showInFileBrowser,
-      run: showFileBrowser,
+      run: () => showFileBrowser(tabId),
       disabled: !isRemote,
-      title: strings.comingSoon,
+      title: isRemote ? undefined : strings.fileBrowserLocalOnly,
     },
     { label: strings.closeTab, run: () => closeTab(tabId) },
   ];

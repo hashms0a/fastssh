@@ -1,8 +1,10 @@
 import { strings } from "../lib/strings";
 import { copyText, readClipboard } from "../lib/clipboard";
+import { showFileBrowserFor } from "../lib/fileBrowser";
 import { logError } from "../lib/log";
 import { useAppStore } from "../store/useAppStore";
-import { entryOf } from "./activeTab";
+import { activeTabId, entryOf } from "./activeTab";
+import { writeTab } from "./promptActions";
 
 /**
  * The actions behind the shortcut matrix and the terminal context menu
@@ -56,7 +58,28 @@ export function openSearch(tabId?: string): void {
   if (!useAppStore.getState().searchOpen) useAppStore.getState().setSearchOpen(true);
 }
 
-/** Ctrl+Shift+E: the sftp:// launcher is wired in Stage 7 (R16). */
-export function showFileBrowser(): void {
-  useAppStore.getState().pushToast(strings.comingSoon);
+/** Ctrl+Shift+E / the menu item (R16, task 7.4): the host of `tabId`, or the
+ *  selected host when the shortcut fires from the keyboard. */
+export function showFileBrowser(tabId?: string): void {
+  const st = useAppStore.getState();
+  const hostId = tabId ? (st.tabs[tabId]?.hostId ?? "") : (st.selectedHostId ?? "");
+  const host = st.hosts.find((h) => h.id === hostId);
+  if (!host) {
+    st.pushToast(strings.fileBrowserLocalOnly);
+    return;
+  }
+  void showFileBrowserFor(host);
+}
+
+/** Bookmarks "Run" (task 7.1, R3): the command reaches the active tab's PTY
+ *  with its newline, exactly as if the user had typed it. */
+export function runBookmark(command: string): void {
+  const st = useAppStore.getState();
+  const tabId = activeTabId();
+  const sessionId = tabId ? (st.tabs[tabId]?.sessionId ?? null) : null;
+  if (!tabId || !sessionId) {
+    st.pushToast(strings.openTerminalFirst);
+    return;
+  }
+  writeTab(tabId, sessionId, `${command}\n`);
 }

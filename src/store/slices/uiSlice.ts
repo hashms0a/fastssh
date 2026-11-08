@@ -14,6 +14,8 @@ export interface Toast {
   id: number;
   message: string;
   kind: "info" | "error";
+  /** Set for "… Copy this address: <url>" toasts: the Copy button's payload (R16). */
+  copy?: string;
 }
 
 /** Search toolbar state (task 6.5, R14); `stopped` is the "No more matches" edge. */
@@ -59,7 +61,7 @@ export interface UiSlice {
   patchSearch: (patch: Partial<SearchState>) => void;
   setWindowFocused: (focused: boolean) => void;
   /** Info toasts auto-dismiss after 6 s; error toasts stay until dismissed. */
-  pushToast: (message: string, kind?: "info" | "error") => void;
+  pushToast: (message: string, kind?: "info" | "error", copy?: string) => void;
   dismissToast: (id: number) => void;
 }
 
@@ -85,9 +87,9 @@ export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set, get)
   setSearchOpen: (open) => set(open ? { searchOpen: true } : { searchOpen: false, search: SEARCH_DEFAULT }),
   patchSearch: (patch) => set({ search: { ...get().search, ...patch } }),
   setWindowFocused: (focused) => set({ windowFocused: focused }),
-  pushToast: (message, kind = "info") => {
+  pushToast: (message, kind = "info", copy) => {
     const id = toastSeq++;
-    set({ toasts: [...get().toasts, { id, message, kind }] });
+    set({ toasts: [...get().toasts, { id, message, kind, copy }] });
     if (kind === "info") {
       setTimeout(() => get().dismissToast(id), 6000);
     }

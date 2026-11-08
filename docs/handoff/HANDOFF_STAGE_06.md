@@ -280,5 +280,7 @@ Check on a real device (`[human]`)
 
 - Should `Copied N lines` count logical lines (unwrap wrapped rows) or keep the
   buffer-row count?
+  keep
 - Should Ctrl+Shift+E on Localhost open `file://$HOME`, or keep the
   remote-only rule from R16?
+  keep

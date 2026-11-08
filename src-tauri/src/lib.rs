@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod env_sanitize;
 pub mod error;
+pub mod file_browser;
 pub mod models;
 pub mod paths;
 pub mod pty_manager;
@@ -62,6 +63,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::system::get_runtime_info,
             commands::system::quit_app,
+            commands::system::open_sftp_file_browser,
+            commands::system::open_url,
             commands::library::load_all,
             commands::library::save_hosts,
             commands::library::save_accounts,

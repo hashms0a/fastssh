@@ -295,9 +295,15 @@ export async function contextMenuInPage(selector: string): Promise<void> {
 }
 
 /** Focus a text field and type into it, one key at a time: sending the whole
- *  string right after the field appears drops its first character here. */
+ *  string right after the field appears drops its first character here. The
+ *  focus call is explicit because a dispatched click does not move focus away
+ *  from an element that already has it (e.g. a popover's autofocus field). */
 export async function typeInto(testId: string, text: string): Promise<void> {
-  await clickInPage(testId);
+  await (await byTestId(testId)).waitForExist({ timeout: 5000 });
+  await browser.execute((id) => {
+    (document.querySelector(`[data-testid="${id}"]`) as HTMLElement | null)?.focus();
+  }, testId);
+  await browser.pause(150);
   for (const ch of text) {
     await browser.keys([ch === " " ? "Space" : ch]);
     await browser.pause(70);

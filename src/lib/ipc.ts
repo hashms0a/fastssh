@@ -55,4 +55,10 @@ export const ipc = {
   writePty: (sessionId: string, data: string) => invoke<void>("write_pty", { sessionId, data }),
   resizePty: (sessionId: string, cols: number, rows: number) => invoke<void>("resize_pty", { sessionId, cols, rows }),
   killSession: (sessionId: string) => invoke<void>("kill_session", { sessionId }),
+
+  // Stage 7: openers (R16, R12). Both resolve with the launcher that accepted
+  // the URL, and reject with an AppError whose message contains the URL.
+  openSftpFileBrowser: (username: string, host: string, port: number) =>
+    invoke<string>("open_sftp_file_browser", { username, host, port }),
+  openUrl: (url: string) => invoke<string>("open_url", { url }),
 };

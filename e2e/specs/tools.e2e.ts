@@ -202,13 +202,14 @@ describe("terminal tools: shortcuts, search, unread (Stage 6)", () => {
     expect(await toastTexts()).not.toEqual([]); // "Copied 1 line", and the shell got nothing
   });
 
-  // Row: Ctrl+Shift+E reports that the file browser arrives in Stage 7.
-  it("Ctrl+Shift+E toasts Coming soon", async () => {
+  // Row: Ctrl+Shift+E on Localhost explains that it is remote-only (R16;
+  // the owner kept the remote-only rule, Stage 6 open question).
+  it("Ctrl+Shift+E on Localhost reports that it is remote-only", async () => {
     await loadFixture("legacy");
     const tabId = await connectRow("Localhost");
     await focusTerm(tabId);
     await browser.keys(["Control", "Shift", "e"]);
-    await browser.waitUntil(async () => (await toastTexts()).some((t) => t.includes("Coming soon")), {
+    await browser.waitUntil(async () => (await toastTexts()).some((t) => t.includes("works for remote connections")), {
       timeout: 6000,
       interval: 250,
     });

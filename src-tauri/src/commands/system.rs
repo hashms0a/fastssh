@@ -1,3 +1,5 @@
+use crate::error::AppError;
+use crate::file_browser;
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -57,6 +59,58 @@ pub fn get_runtime_info() -> RuntimeInfo {
 #[tauri::command]
 pub fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
+}
+
+/// A launcher can hold the URL for up to 10 s, so both openers run on the
+/// blocking pool instead of the IPC thread.
+async fn blocking<T: Send + 'static>(
+    f: impl FnOnce() -> Result<T, AppError> + Send + 'static,
+) -> Result<T, AppError> {
+    tokio::task::spawn_blocking(f)
+        .await
+        .map_err(|e| AppError::new("join", e.to_string()))?
+}
+
+/// R16 / Ctrl+Shift+E / "Show in File Browser" (task 7.4).
+/// The frontend resolves the real target first — account credentials and,
+/// in sync mode, the HostName/Port/User of the ssh_config block — so this
+/// command only builds the URL and runs the launcher chain. It returns the
+/// launcher that accepted the URL; on failure the AppError message contains
+/// the URL, which the UI shows with a Copy button (task 7.5).
+#[tauri::command]
+pub async fn open_sftp_file_browser(
+    username: String,
+    host: String,
+    port: u16,
+) -> Result<String, AppError> {
+    let url = file_browser::sftp_url(&username, &host, port);
+    let desktop = crate::env_sanitize::clean_env()
+        .get("XDG_CURRENT_DESKTOP")
+        .cloned()
+        .unwrap_or_default();
+    blocking(move || {
+        file_browser::open_sftp(&url, &desktop)
+            .map(str::to_string)
+            .map_err(|m| AppError::new("open", m))
+    })
+    .await
+}
+
+/// R12: a link clicked in the terminal. http/https only (task 7.3).
+#[tauri::command]
+pub async fn open_url(url: String) -> Result<String, AppError> {
+    if !file_browser::is_web_url(&url) {
+        return Err(AppError::new(
+            "scheme",
+            format!("FastSSH opens only http:// and https:// links ({url})."),
+        ));
+    }
+    blocking(move || {
+        file_browser::open_web_url(&url)
+            .map(str::to_string)
+            .map_err(|m| AppError::new("open", m))
+    })
+    .await
 }
 
 #[cfg(test)]

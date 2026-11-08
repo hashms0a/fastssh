@@ -7,6 +7,7 @@ import { addHost } from "../lib/editorActions";
 import { openLocalShell } from "../terminal/sessionController";
 import { useAppStore } from "../store/useAppStore";
 import { ContextMenu } from "./ContextMenu";
+import { BookmarksPopover } from "./BookmarksPopover";
 
 /**
  * Header bar (R22): New Connection, Local Shell, Bookmarks, the filter
@@ -17,6 +18,13 @@ export function HeaderBar() {
   const filter = useAppStore((s) => s.filter);
   const setFilter = useAppStore((s) => s.setFilter);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [popover, setPopover] = useState<{ x: number; y: number } | null>(null);
+
+  /** R3: closing the popover puts the focus back on the header button. */
+  const closeBookmarks = (): void => {
+    setPopover(null);
+    (document.querySelector('[data-testid="bookmarks"]') as HTMLElement | null)?.focus();
+  };
 
   return (
     <header
@@ -50,9 +58,13 @@ export function HeaderBar() {
       <button
         type="button"
         data-testid="bookmarks"
-        title={strings.comingSoon}
-        disabled
-        className="flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1.5 text-sm hover:bg-[var(--accent)] hover:text-white disabled:opacity-60"
+        title={strings.bookmarks}
+        aria-expanded={popover ? true : undefined}
+        className="flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1.5 text-sm hover:bg-[var(--accent)] hover:text-white"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setPopover({ x: r.left, y: r.bottom + 4 });
+        }}
       >
         <Bookmark size={15} aria-hidden />
         {strings.bookmarks}
@@ -80,6 +92,8 @@ export function HeaderBar() {
       >
         <EllipsisVertical size={18} aria-hidden />
       </button>
+
+      {popover && <BookmarksPopover x={popover.x} y={popover.y} onClose={closeBookmarks} />}
 
       {menu && (
         <ContextMenu

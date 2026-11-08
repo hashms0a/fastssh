@@ -1,4 +1,6 @@
 import { strings } from "../lib/strings";
+import { copyText } from "../lib/clipboard";
+import { logError } from "../lib/log";
 import { useAppStore } from "../store/useAppStore";
 
 /**
@@ -24,7 +26,7 @@ export function Toasts() {
           key={`w:${w}`}
           data-testid="warning-line"
           role="alert"
-          className="flex items-start gap-3 rounded-md bg-[var(--danger)] px-3 py-2 text-sm text-white shadow-lg"
+          className="flex items-start gap-3 rounded-md bg-[var(--danger)] px-3 py-2 text-sm text-white shadow-lg pointer-events-auto"
         >
           <span className="min-w-0 break-words">{w}</span>
           <button
@@ -42,14 +44,29 @@ export function Toasts() {
         <div
           key={t.id}
           data-testid="toast"
+          data-copy={t.copy ?? ""}
           role={t.kind === "error" ? "alert" : "status"}
-          className={`flex items-start gap-3 rounded-md px-3 py-2 text-sm shadow-lg ${
+          className={`pointer-events-auto flex items-start gap-3 rounded-md px-3 py-2 text-sm shadow-lg ${
             t.kind === "error"
               ? "bg-[var(--danger)] text-white"
               : "bg-[var(--bg-alt)] text-[var(--fg)] border border-[var(--border)]"
           }`}
         >
           <span className="min-w-0 break-words">{t.message}</span>
+          {t.copy && (
+            <button
+              type="button"
+              data-testid="toast-copy"
+              className="shrink-0 rounded border border-current/30 px-2 hover:opacity-70"
+              onClick={() => {
+                copyText(t.copy ?? "")
+                  .then(() => useAppStore.getState().pushToast(strings.copiedUrl))
+                  .catch((e) => logError("toast copy failed", e));
+              }}
+            >
+              {strings.clipboardCopy}
+            </button>
+          )}
           <button
             type="button"
             data-testid="toast-dismiss"

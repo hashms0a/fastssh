@@ -116,6 +116,22 @@ export const strings = {
   copiedLines: (n: number) => `Copied ${n} ${n === 1 ? "line" : "lines"}`,
   nothingToCopy: "Nothing to copy",
   noCommandYet: "No command yet",
+  // Bookmarks popover (Stage 7, R3)
+  bookmarkSearch: "Search bookmarks\u2026",
+  bookmarkName: "Name",
+  bookmarkCommand: "Command",
+  bookmarkAdd: "Add",
+  bookmarkRun: "Run",
+  bookmarkDelete: "Delete",
+  bookmarkNone: "No bookmarks yet",
+  bookmarkNoMatch: "Nothing matches the search",
+  openTerminalFirst: "Open a terminal first",
+  removeBookmarkConfirm: (name: string) => `Remove bookmark ${name}?`,
+  // File browser + links (Stage 7, R16 / R12)
+  fileBrowserLocalOnly: "Show in File Browser works for remote connections.",
+  clipboardCopy: "Copy",
+  copiedUrl: "Copied the address",
+  linkRefused: (uri: string) => `FastSSH opens only http:// and https:// links (${uri}).`,
   // Validation (validateHost message keys)
   validation: {
     nameRequired: "Name is required",
@@ -125,6 +141,7 @@ export const strings = {
     portRange: "Port must be between 1 and 65535",
     tunnelsInvalid: 'Tunnel must look like "-L 8080:localhost:80"',
     accountNameRequired: "Name is required",
+    commandRequired: "Command is required",
   },
 } as const;
 
