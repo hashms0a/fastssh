@@ -10,7 +10,6 @@ host keys, agent, and `~/.ssh/config` behaviour stay yours.
 
 <img width="1100" height="640" alt="header-menu" src="https://github.com/user-attachments/assets/574feefe-ae14-441f-ade7-d6e453ca534a" />
 
-
 ## Install
 
 Download [`FastSSH_1.1.0_amd64.AppImage`](https://github.com/hashms0a/fastssh/releases/tag/v1.1.0) and make it executable:
