@@ -14,10 +14,10 @@ describe("About dialog (task 8.6)", () => {
   it("shows the version, the project line, the license and the runtime info", () => {
     render(
       <AboutDialog
-        info={{ version: "0.1.0", desktop: "GNOME", session: "wayland", appimage: false, dmabufDisabled: true }}
+        info={{ version: "9.9.9", desktop: "GNOME", session: "wayland", appimage: false, dmabufDisabled: true }}
       />,
     );
-    expect(screen.getByTestId("about-version").textContent).toBe("v0.1.0");
+    expect(screen.getByTestId("about-version").textContent).toBe("v9.9.9");
     expect(screen.getByText(strings.aboutProject)).toBeTruthy();
     expect(screen.getByText(strings.aboutLicense)).toBeTruthy();
     expect(screen.getByTestId("about-runtime").textContent ?? "").toContain("GNOME/wayland");

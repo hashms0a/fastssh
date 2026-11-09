@@ -118,7 +118,22 @@ pub async fn open_url(url: String) -> Result<String, AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::desktop_label;
+    use super::{desktop_label, get_runtime_info};
+
+    /// The About dialog and the workspace status bar print exactly this value,
+    /// so it has to be the version the manifest declares. An AppImage packed
+    /// before a version bump used to show a number the repo no longer had;
+    /// `src/version.test.ts` keeps the other manifests in step with this one.
+    #[test]
+    fn reports_the_version_cargo_toml_declares() {
+        let declared = include_str!("../../Cargo.toml")
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("version = \""))
+            .and_then(|rest| rest.split('"').next())
+            .expect("Cargo.toml declares [package] version");
+        assert_eq!(get_runtime_info().version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(get_runtime_info().version, declared);
+    }
 
     #[test]
     fn prefers_the_known_desktop_segment() {

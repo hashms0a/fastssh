@@ -21,6 +21,14 @@ interface Props {
  * outside click, window blur and scroll. Clamped so it never renders
  * off-screen at the right/bottom edge.
  *
+ * The menu is mounted inside the row that opened it, and a selected row sets
+ * `text-[var(--on-accent)]` (near-black on the light-blue accent) for its own
+ * label. Text therefore has to be set here, on the menu itself: inheriting
+ * would paint near-black labels on the dark `--bg-alt` panel. Item colours
+ * name palette tokens explicitly (`--fg` idle, `--on-accent` on the accent
+ * fill, `--muted` when disabled); every pair is asserted in
+ * src/themeContrast.test.ts.
+ *
  * Task 12.5: opening moves focus to the first enabled item, ArrowUp/Down
  * (plus Home/End) walk the items, and closing puts focus back on the control
  * that opened the menu.
@@ -91,7 +99,7 @@ export function ContextMenu({ x, y, items, onClose, testId = "context-menu" }: P
       ref={ref}
       data-testid={testId}
       role="menu"
-      className="fixed z-50 min-w-40 rounded-md border border-[var(--border)] bg-[var(--bg-alt)] py-1 shadow-lg"
+      className="fixed z-50 min-w-40 rounded-md border border-[var(--border)] bg-[var(--bg-alt)] py-1 text-[var(--fg)] shadow-lg"
       style={{ left: pos.left, top: pos.top }}
     >
       {items.map((item) => (
@@ -102,7 +110,9 @@ export function ContextMenu({ x, y, items, onClose, testId = "context-menu" }: P
           data-testid={`${testId}-item`}
           title={item.title}
           disabled={item.disabled}
-          className="block w-full px-3 py-1 text-left text-sm hover:bg-[var(--accent)] hover:text-[var(--on-accent)] disabled:opacity-50"
+          // `enabled:` keeps a disabled item from taking the hover/focus fill:
+          // :hover and :focus still match a disabled button in CSS.
+          className="block w-full px-3 py-1 text-left text-sm text-[var(--fg)] enabled:hover:bg-[var(--accent)] enabled:hover:text-[var(--on-accent)] enabled:focus:bg-[var(--accent)] enabled:focus:text-[var(--on-accent)] disabled:text-[var(--muted)]"
           onClick={() => {
             onClose();
             item.run();

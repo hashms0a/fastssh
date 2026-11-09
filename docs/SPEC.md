@@ -485,7 +485,7 @@ Ensure the product name (`FastSSH`), bundle identifier, window defaults, and App
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "FastSSH",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "identifier": "io.github.fastssh.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -552,9 +552,9 @@ npm run tauri build -- --bundles appimage
 ```
 
 The self-contained AppImage is output to:
-`src-tauri/target/release/bundle/appimage/FastSSH_1.0.0_amd64.AppImage`
+`src-tauri/target/release/bundle/appimage/FastSSH_1.1.0_amd64.AppImage`
 
-_(Note for End Users on Ubuntu/Kubuntu 22.04+)_: If `libfuse2t64` is not installed on the target machine, the AppImage can also be run directly without FUSE via `./FastSSH_1.0.0_amd64.AppImage --appimage-extract-and-run`.
+_(Note for End Users on Ubuntu/Kubuntu 22.04+)_: If `libfuse2t64` is not installed on the target machine, the AppImage can also be run directly without FUSE via `./FastSSH_1.1.0_amd64.AppImage --appimage-extract-and-run`.
 
 ## 11. Step-by-Step Implementation Order for the AI Agent
 

@@ -10,6 +10,10 @@ cd "$(dirname "$0")/.."
 
 IMAGE=fastssh-appimage-jammy
 NODE_MAJOR="$(node -v | sed 's/^v//' | cut -d. -f1)"
+# The release name comes from src-tauri/tauri.conf.json, which is what tauri
+# itself puts in the AppImage filename; nothing here hardcodes a version.
+VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+OUT_APPIMAGE="FastSSH_${VERSION}_amd64.AppImage"
 
 docker build --build-arg NODE_MAJOR="$NODE_MAJOR" -t "$IMAGE" tools/appimage-jammy
 if [[ "${1:-}" == "--image" ]]; then echo "image $IMAGE ready"; exit 0; fi
@@ -37,6 +41,7 @@ docker run --rm \
   --user "$(id -u):$(id -g)" \
   -e HOME=/tmp/home \
   -e APPIMAGE_EXTRACT_AND_RUN=1 \
+  -e OUT_APPIMAGE="$OUT_APPIMAGE" \
   -v "$PWD":/src \
   -v "$CACHE/home:/tmp/home" \
   "$IMAGE" \
@@ -53,7 +58,7 @@ docker run --rm \
     cd "$(dirname "$APPDIR")"
     rm -f FastSSH-x86_64.AppImage
     "$LD" --appdir "$APPDIR" --output appimage
-    mv -f FastSSH-x86_64.AppImage FastSSH_1.0.0_amd64.AppImage
+    mv -f FastSSH-x86_64.AppImage "$OUT_APPIMAGE"
   '
 
 APPDIR=src-tauri/target-jammy/release/bundle/appimage
@@ -72,7 +77,7 @@ ls -lh dist-release/
 T="${FASTSSH_TESTENV:-$HOME/fastssh-testenv}"
 SMOKE=/tmp/fastssh-appimage-smoke.log
 FASTSSH_CONFIG_DIR="$T/config" FASTSSH_SSH_DIR="$T/ssh" FASTSSH_LEGACY_DIR="$T/legacy" \
-  APPIMAGE_EXTRACT_AND_RUN=1 timeout 25 ./dist-release/FastSSH_1.0.0_amd64.AppImage > "$SMOKE" 2>&1 &
+  APPIMAGE_EXTRACT_AND_RUN=1 timeout 25 "./dist-release/$OUT_APPIMAGE" > "$SMOKE" 2>&1 &
 sleep 14
 pkill -x fastssh 2>/dev/null || true
 wait 2>/dev/null || true
