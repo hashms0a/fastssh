@@ -12,11 +12,11 @@ host keys, agent, and `~/.ssh/config` behaviour stay yours.
 
 ## Install
 
-Download [`FastSSH_1.1.0_amd64.AppImage`](https://github.com/hashms0a/fastssh/releases/tag/v1.1.0) and make it executable:
+Download [`FastSSH_1.2.0_amd64.AppImage`](https://github.com/hashms0a/fastssh/releases/tag/v1.2.0) and make it executable:
 
 ```bash
-chmod +x FastSSH_1.1.0_amd64.AppImage
-./FastSSH_1.1.0_amd64.AppImage
+chmod +x FastSSH_1.2.0_amd64.AppImage
+./FastSSH_1.2.0_amd64.AppImage
 ```
 
 AppImages normally need FUSE. On Ubuntu/Kubuntu 22.04+ that is `libfuse2t64`:
@@ -28,7 +28,7 @@ sudo apt install libfuse2t64
 Without FUSE, run it in extract-and-run mode (slower start, no FUSE needed):
 
 ```bash
-./FastSSH_1.1.0_amd64.AppImage --appimage-extract-and-run
+./FastSSH_1.2.0_amd64.AppImage --appimage-extract-and-run
 ```
 
 Requires X11 or Wayland with WebKitGTK 4.1 (bundled in the AppImage).
@@ -170,7 +170,7 @@ npm install
 npm run tauri build -- --bundles appimage
 ```
 
-Output: `src-tauri/target/release/bundle/appimage/FastSSH_1.1.0_amd64.AppImage`.
+Output: `src-tauri/target/release/bundle/appimage/FastSSH_1.2.0_amd64.AppImage`.
 
 **glibc:** the AppImage must be built on Ubuntu 22.04 (glibc 2.35) so it runs on
 22.04 and later. On another distribution use the container script instead:

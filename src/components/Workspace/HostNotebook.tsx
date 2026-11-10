@@ -23,7 +23,10 @@ interface Props {
  *
  * Stage 11 (P2): dragging a tab onto another tab reorders this notebook (the
  * drag id is local state here, so a drop can never move a tab between hosts),
- * and a double-click renames it.
+ * and a double-click renames it. The dragged tab fades and the tabs it can
+ * land on get a dashed drop line. Panes are keyed by tab id and all stay
+ * mounted, so a reorder changes only `tabOrder` — the xterm buffer, its host
+ * div and the SSH connection are untouched.
  */
 export function HostNotebook({ host, visible }: Props) {
   const ids = useAppStore((s) => s.tabOrder[host.id] ?? NO_TABS);
@@ -78,6 +81,7 @@ export function HostNotebook({ host, visible }: Props) {
               hostId={host.id}
               active={id === activeId}
               dragTarget={dragged !== null && dragged !== id}
+              dragged={dragged === id}
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
               onDropOn={onDropOn}

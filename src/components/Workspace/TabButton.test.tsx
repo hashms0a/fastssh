@@ -18,7 +18,39 @@ const tab = (id: string, title: string): TerminalTab => ({
 
 const noop = (): void => undefined;
 
-function renderTab(tabId: string, title: string): void {
+/**
+ * A drag payload stand-in. jsdom's DragEvent carries no dataTransfer, and the
+ * point of these tests is what the tab puts into it, so the event is built by
+ * hand: WebKitGTK starts no drag session when dragstart leaves it empty.
+ */
+function dragData(): { data: Map<string, string>; dataTransfer: DataTransferLike } {
+  const data = new Map<string, string>();
+  return {
+    data,
+    dataTransfer: {
+      effectAllowed: "",
+      dropEffect: "",
+      setData: (kind: string, value: string) => {
+        data.set(kind, value);
+      },
+    },
+  };
+}
+
+interface DataTransferLike {
+  effectAllowed: string;
+  dropEffect: string;
+  setData: (kind: string, value: string) => void;
+}
+
+function fireDrag(el: HTMLElement, type: string, dataTransfer: DataTransferLike): boolean {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "dataTransfer", { value: dataTransfer });
+  el.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
+function renderTab(tabId: string, title: string, extra: Partial<{ dragTarget: boolean; dragged: boolean }> = {}): void {
   useAppStore.setState({
     tabs: { a: tab("a", title), b: tab("b", "b") },
     tabOrder: { h1: ["a", "b"] },
@@ -29,7 +61,8 @@ function renderTab(tabId: string, title: string): void {
       tabId={tabId}
       hostId="h1"
       active={tabId === "a"}
-      dragTarget={false}
+      dragTarget={extra.dragTarget ?? false}
+      dragged={extra.dragged ?? false}
       onDragStart={noop}
       onDragEnd={noop}
       onDropOn={noop}
@@ -48,6 +81,63 @@ describe("Stage 11 tab gestures", () => {
     expect(el.getAttribute("data-title")).toBe("Localhost");
   });
 
+  it("dragstart carries the tab id, without which WebKitGTK starts no drag", () => {
+    renderTab("a", "Localhost");
+    const { data, dataTransfer } = dragData();
+    fireDrag(screen.getByTestId("tab"), "dragstart", dataTransfer);
+    expect(dataTransfer.effectAllowed).toBe("move");
+    expect(data.get("text/plain")).toBe("a");
+  });
+
+  it("hovering a drop target allows the move", () => {
+    renderTab("b", "b", { dragTarget: true });
+    const { dataTransfer } = dragData();
+    expect(fireDrag(screen.getByTestId("tab"), "dragover", dataTransfer)).toBe(true);
+    expect(dataTransfer.dropEffect).toBe("move");
+  });
+
+  it("a tab that is not a target refuses the drop", () => {
+    renderTab("b", "b", { dragTarget: false });
+    expect(fireDrag(screen.getByTestId("tab"), "dragover", dragData().dataTransfer)).toBe(false);
+  });
+
+  it("the dragged tab fades", () => {
+    renderTab("a", "a", { dragged: true });
+    expect(screen.getByTestId("tab").className).toContain("opacity-50");
+  });
+
+  it("a drop target shows a drop line and does not fade", () => {
+    renderTab("b", "b", { dragTarget: true });
+    const className = screen.getByTestId("tab").className;
+    expect(className).toContain("border-dashed");
+    expect(className).not.toContain("opacity-50");
+  });
+
+  it("pressing the close button does not start a drag", () => {
+    let started = false;
+    useAppStore.setState({
+      tabs: { a: tab("a", "a"), b: tab("b", "b") },
+      tabOrder: { h1: ["a", "b"] },
+      activeTabByHost: { h1: "a" },
+    });
+    render(
+      <TabButton
+        tabId="a"
+        hostId="h1"
+        active
+        dragTarget={false}
+        dragged={false}
+        onDragStart={() => {
+          started = true;
+        }}
+        onDragEnd={noop}
+        onDropOn={noop}
+      />,
+    );
+    fireDrag(screen.getByTestId("tab-close"), "dragstart", dragData().dataTransfer);
+    expect(started).toBe(false);
+  });
+
   it("a drop on another tab goes through the notebook callback", () => {
     let dropped: string | null = null;
     useAppStore.setState({
@@ -61,6 +151,7 @@ describe("Stage 11 tab gestures", () => {
         hostId="h1"
         active={false}
         dragTarget
+        dragged={false}
         onDragStart={noop}
         onDragEnd={noop}
         onDropOn={(id) => {

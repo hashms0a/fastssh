@@ -11,6 +11,8 @@ interface Props {
   active: boolean;
   /** A drag is in flight from another tab of this notebook. */
   dragTarget: boolean;
+  /** This tab is the one being dragged. */
+  dragged: boolean;
   onDragStart: (tabId: string) => void;
   onDragEnd: () => void;
   /** Something was dragged onto this tab. */
@@ -22,8 +24,16 @@ interface Props {
  * Stage 11 (P2) adds the two tab gestures: drag it onto another tab to move
  * it, and double-click it to rename. The title lives on the tab object, which
  * is never saved.
+ *
+ * The drag has to carry payload: WebKitGTK (the Tauri webview on Linux) starts
+ * no drag session for a `draggable` element whose `dragstart` leaves
+ * `dataTransfer` empty, so a bare `effectAllowed` produced a tab that looked
+ * grabbable and moved nothing. It also needs `dropEffect` on the hover to keep
+ * the drop allowed. The gestures stay separated: the close button and the
+ * rename field cancel `dragstart`, so pressing on the "x" or editing a title
+ * never drags the tab.
  */
-export function TabButton({ tabId, hostId, active, dragTarget, onDragStart, onDragEnd, onDropOn }: Props) {
+export function TabButton({ tabId, hostId, active, dragTarget, dragged, onDragStart, onDragEnd, onDropOn }: Props) {
   countRender(`tab:${tabId}`); // task 12.4
   const title = useAppStore((s) => s.tabs[tabId]?.title ?? "");
   const unread = useAppStore((s) => s.tabs[tabId]?.unread ?? false);
@@ -58,16 +68,21 @@ export function TabButton({ tabId, hostId, active, dragTarget, onDragStart, onDr
       draggable={!renaming}
       className={`flex shrink-0 items-center gap-1.5 rounded-t border-b-2 px-2 py-1 text-sm ${
         active ? "border-[var(--accent)] bg-[var(--bg)]" : "border-transparent text-[var(--muted)] hover:bg-[var(--bg)]"
-      } ${dragTarget ? "border-[var(--accent)] border-dashed" : ""}`}
+      } ${dragTarget ? "border-[var(--accent)] border-dashed" : ""} ${dragged ? "opacity-50" : ""}`}
       onClick={() => setActiveTab(hostId, tabId)}
       onDoubleClick={open}
       onDragStart={(e) => {
-        if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", tabId); // a drag with no data never starts here
+        }
         onDragStart(tabId);
       }}
       onDragEnd={onDragEnd}
       onDragOver={(e) => {
-        if (dragTarget) e.preventDefault(); // only a drop onto another tab is a move
+        if (!dragTarget) return; // only a drop onto another tab is a move
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
       }}
       onDrop={(e) => {
         e.preventDefault();
@@ -130,6 +145,10 @@ export function TabButton({ tabId, hostId, active, dragTarget, onDragStart, onDr
         onClick={(e) => {
           e.stopPropagation();
           closeTab(tabId);
+        }}
+        onDragStart={(e) => {
+          e.preventDefault(); // a press on the "x" closes the tab, it never drags it
+          e.stopPropagation();
         }}
       >
         <X size={13} aria-hidden />
